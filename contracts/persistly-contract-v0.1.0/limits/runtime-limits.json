@@ -1,0 +1,16 @@
+{
+  "metadataMaxBytes": 16384,
+  "stateMaxBytes": 262144,
+  "errorCodes": [
+    "invalid_request",
+    "unauthorized",
+    "not_found",
+    "conflict",
+    "rate_limited",
+    "payload_too_large",
+    "server_error"
+  ],
+  "conflictReasons": [
+    "base_version_mismatch"
+  ]
+}

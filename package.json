@@ -1,0 +1,75 @@
+{
+  "name": "@persistly/sdk-js",
+  "version": "0.9.0",
+  "description": "JavaScript SDK for Persistly cloud save sync.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "sideEffects": false,
+  "homepage": "https://docs.persistly.app/sdk/javascript",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Persistly/persistly-sdk-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Persistly/persistly-sdk-js/issues"
+  },
+  "keywords": [
+    "persistly",
+    "game saves",
+    "cloud saves",
+    "save sync",
+    "games"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./cache": {
+      "types": "./dist/cache.d.ts",
+      "default": "./dist/cache.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    },
+    "./file-cache": {
+      "types": "./dist/file-cache.d.ts",
+      "default": "./dist/file-cache.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "default": "./dist/schema.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "SECURITY.md",
+    "contracts"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test \"tests/*.test.ts\"",
+    "validate:contract": "node scripts/validate-contract.mjs",
+    "prepack": "pnpm validate:contract && pnpm test && pnpm build",
+    "example:basic": "tsx examples/basic.ts",
+    "example:conflict": "tsx examples/conflict.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

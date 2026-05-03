@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "payload_too_large",
+    "message": "State exceeds the maximum allowed size.",
+    "details": {
+      "field": "state",
+      "maxBytes": 262144
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "externalUserId": "auth0|123",
+  "metadata": {
+    "characterName": "Ayla",
+    "slot": 2
+  },
+  "state": {
+    "gold": 100,
+    "level": 1
+  }
+}

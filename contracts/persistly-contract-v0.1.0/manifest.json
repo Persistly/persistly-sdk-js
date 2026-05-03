@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "bundle": "persistly-contract-v0.1.0",
+  "version": "v0.1.0",
+  "exampleSet": "strict",
+  "files": [
+    {
+      "path": "examples/conflict-response.json",
+      "sha256": "1e233aae600dfff11c3c831bdc5478b9911941df09bb738f45978b1dd141f0d4",
+      "bytes": 393
+    },
+    {
+      "path": "examples/create-save.json",
+      "sha256": "7d42b392b2d7198629d75bc742c20f4ee70ce55322365c62a54c53cd63b0e874",
+      "bytes": 150
+    },
+    {
+      "path": "examples/error-response.json",
+      "sha256": "72a05a377c00924bdebfe71e74207d571ebb7a1a2a09fb50a46acb246c214ded",
+      "bytes": 184
+    },
+    {
+      "path": "examples/save-response.json",
+      "sha256": "38ecb79242e7c44540f86e5d01ed54cb23f9910c75668314e684d4cd2f672cd8",
+      "bytes": 311
+    },
+    {
+      "path": "examples/sync-save.json",
+      "sha256": "ff0ad6e17e27a153a862e038562eecf39ed7817da5b2147dbac5f33176423afb",
+      "bytes": 137
+    },
+    {
+      "path": "limits/runtime-limits.json",
+      "sha256": "344d3b26eed325b6ba2de8d000e9dd4f8e09559d28b8a795f3d9453e0d039dea",
+      "bytes": 278
+    },
+    {
+      "path": "openapi/persistly-api.yaml",
+      "sha256": "680084f67aead253b9122b48d3c5de6ad0c76862e240239fcf04c89f097a16d2",
+      "bytes": 14605
+    }
+  ]
+}

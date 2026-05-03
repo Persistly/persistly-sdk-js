@@ -1,0 +1,21 @@
+{
+  "status": "conflict",
+  "save": {
+    "saveId": "sv_01HXYZ",
+    "externalUserId": "auth0|123",
+    "metadata": {
+      "characterName": "Ayla",
+      "slot": 2
+    },
+    "state": {
+      "gold": 140,
+      "level": 3
+    },
+    "version": 5,
+    "createdAt": "2026-04-09T10:00:00Z",
+    "updatedAt": "2026-04-09T10:06:00Z"
+  },
+  "details": {
+    "reason": "base_version_mismatch"
+  }
+}

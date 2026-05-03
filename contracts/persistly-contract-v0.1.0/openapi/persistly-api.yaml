@@ -1,0 +1,477 @@
+openapi: 3.2.0
+info:
+  title: Persistly Runtime API
+  summary: Save-sync API for offline-first and cross-device game persistence.
+  description: |
+    Persistly is a narrow save-sync and persistence layer for games.
+    The public runtime API is intentionally limited to create, load, and sync operations around known save IDs.
+    It is designed for single-player, idle, incremental, async, and cross-device resume flows rather than real-time multiplayer state or authoritative game simulation.
+  contact:
+    name: Persistly Support
+    url: https://docs.persistly.app
+    email: support@persistly.app
+  license:
+    name: Proprietary
+    url: https://persistly.app/terms
+  version: 0.1.0
+servers:
+  - url: https://api.persistly.app
+    description: Public production runtime API
+tags:
+  - name: Operations
+    description: Public operational endpoints for availability checks.
+  - name: Save Sync
+    description: Create, load, and sync saved game state by saveId.
+  - name: Billing Webhooks
+    description: Provider webhook endpoints used by Persistly billing automation.
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [Operations]
+      summary: Health check
+      description: Lightweight readiness endpoint for uptime checks and deployment verification.
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                default:
+                  summary: API is healthy
+                  value:
+                    ok: true
+  /api/v1/saves:
+    post:
+      operationId: createSave
+      tags: [Save Sync]
+      summary: Create save
+      description: Create a new save record and return its canonical save envelope.
+      security:
+        - RuntimeKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSaveRequest'
+            examples:
+              default:
+                summary: Create a new save
+                value:
+                  externalUserId: auth0|123
+                  metadata:
+                    characterName: Ayla
+                    slot: 2
+                  state:
+                    gold: 100
+                    level: 1
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveEnvelopeResponse'
+              examples:
+                default:
+                  summary: Canonical save envelope
+                  value:
+                    save:
+                      saveId: sv_01HXYZ
+                      externalUserId: auth0|123
+                      metadata:
+                        characterName: Ayla
+                        slot: 2
+                      state:
+                        gold: 120
+                        level: 2
+                      version: 4
+                      createdAt: 2026-04-09T10:00:00Z
+                      updatedAt: 2026-04-09T10:05:00Z
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/saves/{saveId}:
+    get:
+      operationId: loadSave
+      tags: [Save Sync]
+      summary: Load save
+      description: Load the canonical server save envelope for a known saveId.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - name: saveId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveEnvelopeResponse'
+              examples:
+                default:
+                  summary: Loaded save envelope
+                  value:
+                    save:
+                      saveId: sv_01HXYZ
+                      externalUserId: auth0|123
+                      metadata:
+                        characterName: Ayla
+                        slot: 2
+                      state:
+                        gold: 120
+                        level: 2
+                      version: 4
+                      createdAt: 2026-04-09T10:00:00Z
+                      updatedAt: 2026-04-09T10:05:00Z
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/saves/{saveId}/sync:
+    post:
+      operationId: syncSave
+      tags: [Save Sync]
+      summary: Sync save
+      description: Submit updated state for a known saveId using baseVersion for optimistic concurrency.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - name: saveId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncSaveRequest'
+            examples:
+              default:
+                summary: Sync local state against the last known version
+                value:
+                  baseVersion: 3
+                  metadata:
+                    characterName: Ayla
+                    slot: 2
+                  state:
+                    gold: 120
+                    level: 2
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncAcceptedResponse'
+              examples:
+                accepted:
+                  summary: Sync accepted
+                  value:
+                    status: accepted
+                    save:
+                      saveId: sv_01HXYZ
+                      externalUserId: auth0|123
+                      metadata:
+                        characterName: Ayla
+                        slot: 2
+                      state:
+                        gold: 120
+                        level: 2
+                      version: 4
+                      createdAt: 2026-04-09T10:00:00Z
+                      updatedAt: 2026-04-09T10:05:00Z
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncConflictResponse'
+              examples:
+                conflict:
+                  summary: Sync conflict with canonical save
+                  value:
+                    status: conflict
+                    save:
+                      saveId: sv_01HXYZ
+                      externalUserId: auth0|123
+                      metadata:
+                        characterName: Ayla
+                        slot: 2
+                      state:
+                        gold: 140
+                        level: 3
+                      version: 5
+                      createdAt: 2026-04-09T10:00:00Z
+                      updatedAt: 2026-04-09T10:06:00Z
+                    details:
+                      reason: base_version_mismatch
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /webhooks/stripe:
+    post:
+      operationId: handleStripeWebhook
+      tags: [Billing Webhooks]
+      summary: Stripe webhook
+      description: Receives signed Stripe events and updates Persistly billing state and plan entitlements.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Event accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [received]
+                properties:
+                  received:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+components:
+  securitySchemes:
+    RuntimeKey:
+      type: http
+      scheme: bearer
+  schemas:
+    HealthResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+    Save:
+      type: object
+      required: [saveId, externalUserId, metadata, state, version, createdAt, updatedAt]
+      properties:
+        saveId:
+          type: string
+        externalUserId:
+          type: [string, "null"]
+        metadata:
+          type: object
+          x-max-bytes: 16384
+          additionalProperties: true
+        state:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+        version:
+          type: integer
+          minimum: 1
+          description: Monotonic save revision. Starts at 1 on create and increments by 1 after each accepted sync.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateSaveRequest:
+      type: object
+      required: [state]
+      properties:
+        externalUserId:
+          type: string
+        metadata:
+          type: object
+          x-max-bytes: 16384
+          additionalProperties: true
+        state:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+    SyncSaveRequest:
+      type: object
+      required: [baseVersion, state]
+      properties:
+        baseVersion:
+          type: integer
+          minimum: 1
+          description: Last canonical save.version accepted by the client. Used for optimistic concurrency conflict detection.
+        metadata:
+          type: object
+          x-max-bytes: 16384
+          additionalProperties: true
+        state:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+    SaveEnvelopeResponse:
+      type: object
+      required: [save]
+      properties:
+        save:
+          $ref: '#/components/schemas/Save'
+    SaveOperationResponse:
+      type: object
+      required: [status, save]
+      properties:
+        status:
+          type: string
+          enum: [accepted, conflict]
+        save:
+          $ref: '#/components/schemas/Save'
+        details:
+          type: object
+          additionalProperties: true
+    SyncAcceptedResponse:
+      type: object
+      required: [status, save]
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+        save:
+          $ref: '#/components/schemas/Save'
+    SyncConflictResponse:
+      type: object
+      required: [status, save, details]
+      properties:
+        status:
+          type: string
+          enum: [conflict]
+        save:
+          $ref: '#/components/schemas/Save'
+        details:
+          type: object
+          required: [reason]
+          properties:
+            reason:
+              type: string
+              enum: [base_version_mismatch]
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [invalid_request, unauthorized, not_found, conflict, rate_limited, payload_too_large, server_error]
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+  responses:
+    InvalidRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Invalid request body
+              value:
+                error:
+                  code: invalid_request
+                  message: Request body is invalid.
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Missing or invalid runtime key
+              value:
+                error:
+                  code: unauthorized
+                  message: Runtime key is invalid or missing.
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Save not found
+              value:
+                error:
+                  code: not_found
+                  message: Save not found.
+    PayloadTooLarge:
+      description: Payload too large
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: State exceeds size limit
+              value:
+                error:
+                  code: payload_too_large
+                  message: State exceeds the maximum allowed size.
+                  details:
+                    field: state
+                    maxBytes: 262144
+    RateLimited:
+      description: Rate limited
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Rate limit exceeded
+              value:
+                error:
+                  code: rate_limited
+                  message: Too many requests. Try again later.
+    ServerError:
+      description: Server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Unexpected server error
+              value:
+                error:
+                  code: server_error
+                  message: Unexpected server error.
