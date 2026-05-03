@@ -24,7 +24,7 @@ test("createSave posts the contract payload and caches the canonical save", asyn
   const expected: SaveEnvelope = {
     save: {
       saveId: "sv_create",
-      externalUserId: "auth0|123",
+      playerRef: "player-184",
       metadata: { slot: 2 },
       state: { level: 1 },
       version: 1,
@@ -44,7 +44,7 @@ test("createSave posts the contract payload and caches the canonical save", asyn
   });
 
   const created = await client.createSave({
-    externalUserId: "auth0|123",
+    playerRef: "player-184",
     metadata: { slot: 2 },
     state: { level: 1 },
   });
@@ -55,7 +55,7 @@ test("createSave posts the contract payload and caches the canonical save", asyn
   assert.equal(requests[0]?.init?.method, "POST");
   assert.match(String(requests[0]?.init?.headers && new Headers(requests[0].init.headers).get("authorization")), /^Bearer ps_test_runtime$/);
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
-    externalUserId: "auth0|123",
+    playerRef: "player-184",
     metadata: { slot: 2 },
     state: { level: 1 },
   });
@@ -70,7 +70,7 @@ test("createSave defaults to the public Persistly API origin when no base URL is
       return createJsonResponse(201, {
         save: {
           saveId: "sv_default_origin",
-          externalUserId: null,
+          playerRef: null,
           metadata: {},
           state: { level: 1 },
           version: 1,
@@ -97,7 +97,7 @@ test("createSave ignores legacy baseUrl overrides and still uses the public Pers
       return createJsonResponse(201, {
         save: {
           saveId: "sv_ignore_override",
-          externalUserId: null,
+          playerRef: null,
           metadata: {},
           state: { level: 1 },
           version: 1,
@@ -123,7 +123,7 @@ test("loadSave caches the canonical save from the runtime API", async () => {
   const expected: SaveEnvelope = {
     save: {
       saveId: "sv_load",
-      externalUserId: null,
+      playerRef: null,
       metadata: {},
       state: { level: 5 },
       version: 7,
@@ -165,7 +165,7 @@ test("syncSave uses the cached version and stores accepted saves", async () => {
   const cache = new MemorySaveCache();
   await cache.set({
     saveId: "sv_sync",
-    externalUserId: "auth0|123",
+    playerRef: "player-184",
     metadata: { slot: 2 },
     state: { gold: 100 },
     version: 3,
@@ -183,7 +183,7 @@ test("syncSave uses the cached version and stores accepted saves", async () => {
         status: "accepted",
         save: {
           saveId: "sv_sync",
-          externalUserId: "auth0|123",
+          playerRef: "player-184",
           metadata: { slot: 2 },
           state: { gold: 125 },
           version: 4,
@@ -211,7 +211,7 @@ test("syncSave stores canonical server state on conflict", async () => {
   const cache = new MemorySaveCache();
   await cache.set({
     saveId: "sv_sync_conflict",
-    externalUserId: "auth0|123",
+    playerRef: "player-184",
     metadata: { slot: 2 },
     state: { gold: 100 },
     version: 3,
@@ -227,7 +227,7 @@ test("syncSave stores canonical server state on conflict", async () => {
         status: "conflict",
         save: {
           saveId: "sv_sync_conflict",
-          externalUserId: "auth0|123",
+          playerRef: "player-184",
           metadata: { slot: 2 },
           state: { gold: 140 },
           version: 5,
@@ -288,7 +288,7 @@ test("updateLocal writes a canonical save to the configured cache without callin
 
   await client.updateLocal({
     saveId: "sv_local",
-    externalUserId: "auth0|123",
+    playerRef: "player-184",
     metadata: { slot: 4 },
     state: { level: 9 },
     version: 11,
@@ -299,7 +299,7 @@ test("updateLocal writes a canonical save to the configured cache without callin
   assert.equal(fetchCalls, 0);
   assert.deepEqual(await cache.get("sv_local"), {
     saveId: "sv_local",
-    externalUserId: "auth0|123",
+    playerRef: "player-184",
     metadata: { slot: 4 },
     state: { level: 9 },
     version: 11,
@@ -312,7 +312,7 @@ test("getLocal reads from the configured cache without calling fetch", async () 
   const cache = new MemorySaveCache();
   await cache.set({
     saveId: "sv_local_read",
-    externalUserId: null,
+    playerRef: null,
     metadata: { slot: 1 },
     state: { level: 2 },
     version: 3,
@@ -340,7 +340,7 @@ test("getLocal reads from the configured cache without calling fetch", async () 
   assert.equal(fetchCalls, 0);
   assert.deepEqual(local, {
     saveId: "sv_local_read",
-    externalUserId: null,
+    playerRef: null,
     metadata: { slot: 1 },
     state: { level: 2 },
     version: 3,
@@ -427,7 +427,7 @@ test("updateLocal rejects saves with non-contract version or timestamp fields", 
     () =>
       client.updateLocal({
         saveId: "sv_invalid",
-        externalUserId: null,
+        playerRef: null,
         metadata: {},
         state: {},
         version: 1.5,
@@ -469,12 +469,12 @@ test("API errors preserve the contract code, message, and details", async () => 
   );
 });
 
-test("client does not expose any external user lookup helpers", () => {
+test("client does not expose any player ref lookup helpers", () => {
   const client = new PersistlyClient({
     runtimeKey: "ps_test_runtime",
   });
 
-  assert.equal(typeof (client as Record<string, unknown>).loadSaveByExternalUserId, "undefined");
-  assert.equal(typeof (client as Record<string, unknown>).findSaveByExternalUserId, "undefined");
+  assert.equal(typeof (client as Record<string, unknown>).loadSaveByPlayerRef, "undefined");
+  assert.equal(typeof (client as Record<string, unknown>).findSaveByPlayerRef, "undefined");
   assert.equal(typeof (client as Record<string, unknown>).listSaves, "undefined");
 });

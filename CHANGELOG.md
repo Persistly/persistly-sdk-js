@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.1
+
+- Renames the optional public save reference field to `playerRef`.
+- Adds `LocalStorageSaveCache` for browser games that persist save snapshots in `localStorage`.
+- Pins `persistly-contract-v0.2.0` with the RC `playerRef` contract.
+
 ## 0.9.0
 
 - Release candidate for the first public JavaScript SDK repository.

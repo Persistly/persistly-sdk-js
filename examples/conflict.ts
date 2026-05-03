@@ -12,7 +12,7 @@ const client = new PersistlyClient({
 });
 
 const created = await client.createSave({
-  externalUserId: "auth0|example-user",
+  playerRef: "example-player",
   metadata: { characterName: "Ayla", slot: 1 },
   state: { gold: 100, level: 1 },
 });

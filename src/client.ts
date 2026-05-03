@@ -19,7 +19,7 @@ export interface SaveEnvelope {
 }
 
 export interface CreateSaveInput {
-  externalUserId?: string;
+  playerRef?: string;
   metadata?: JsonObject;
   state: JsonObject;
 }

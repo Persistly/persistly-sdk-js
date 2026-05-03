@@ -13,7 +13,7 @@ info:
   license:
     name: Proprietary
     url: https://persistly.app/terms
-  version: 0.1.0
+  version: 0.2.0
 servers:
   - url: https://api.persistly.app
     description: Public production runtime API
@@ -61,7 +61,7 @@ paths:
               default:
                 summary: Create a new save
                 value:
-                  externalUserId: auth0|123
+                  playerRef: player-184
                   metadata:
                     characterName: Ayla
                     slot: 2
@@ -81,7 +81,7 @@ paths:
                   value:
                     save:
                       saveId: sv_01HXYZ
-                      externalUserId: auth0|123
+                      playerRef: player-184
                       metadata:
                         characterName: Ayla
                         slot: 2
@@ -128,7 +128,7 @@ paths:
                   value:
                     save:
                       saveId: sv_01HXYZ
-                      externalUserId: auth0|123
+                      playerRef: player-184
                       metadata:
                         characterName: Ayla
                         slot: 2
@@ -191,7 +191,7 @@ paths:
                     status: accepted
                     save:
                       saveId: sv_01HXYZ
-                      externalUserId: auth0|123
+                      playerRef: player-184
                       metadata:
                         characterName: Ayla
                         slot: 2
@@ -214,7 +214,7 @@ paths:
                     status: conflict
                     save:
                       saveId: sv_01HXYZ
-                      externalUserId: auth0|123
+                      playerRef: player-184
                       metadata:
                         characterName: Ayla
                         slot: 2
@@ -280,12 +280,13 @@ components:
           type: boolean
     Save:
       type: object
-      required: [saveId, externalUserId, metadata, state, version, createdAt, updatedAt]
+      required: [saveId, playerRef, metadata, state, version, createdAt, updatedAt]
       properties:
         saveId:
           type: string
-        externalUserId:
+        playerRef:
           type: [string, "null"]
+          description: Optional developer-owned, non-secret player/account reference. It is not an authentication identity and is not queryable through the public runtime API; games must persist and load by saveId.
         metadata:
           type: object
           x-max-bytes: 16384
@@ -308,8 +309,9 @@ components:
       type: object
       required: [state]
       properties:
-        externalUserId:
+        playerRef:
           type: string
+          description: Optional developer-owned, non-secret player/account reference. It is not an authentication identity and is not queryable through the public runtime API; games must persist and load by saveId.
         metadata:
           type: object
           x-max-bytes: 16384

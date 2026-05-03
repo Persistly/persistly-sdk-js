@@ -17,7 +17,7 @@ export interface SaveSnapshot {
   state: JsonObject;
   createdAt: string;
   updatedAt: string;
-  externalUserId: string | null;
+  playerRef: string | null;
 }
 
 const RFC3339_DATE_TIME_PATTERN =
@@ -35,7 +35,7 @@ export function parseSaveSnapshot(value: unknown): SaveSnapshot {
   const record = parseObject(value, "Save");
   const metadata = parseObject(record.metadata, "Save.metadata");
   const state = parseObject(record.state, "Save.state");
-  const externalUserId = record.externalUserId;
+  const playerRef = record.playerRef;
   const version = record.version;
   const createdAt = record.createdAt;
   const updatedAt = record.updatedAt;
@@ -56,13 +56,13 @@ export function parseSaveSnapshot(value: unknown): SaveSnapshot {
     throw new Error("Save.updatedAt must be a valid RFC 3339 date-time string.");
   }
 
-  if (!(typeof externalUserId === "string" || externalUserId === null)) {
-    throw new Error("Save.externalUserId must be a string or null.");
+  if (!(typeof playerRef === "string" || playerRef === null)) {
+    throw new Error("Save.playerRef must be a string or null.");
   }
 
   return {
     saveId: record.saveId,
-    externalUserId,
+    playerRef,
     metadata,
     state,
     version,
