@@ -53,9 +53,9 @@ if (result.status === PersistlySyncStatus.Conflict) {
 }
 ```
 
-## Production API Origin
+## API Origin
 
-The client targets `https://api.persistly.app` by default. You only need to provide a runtime key in the common case.
+The SDK uses the Persistly production runtime API by default. In normal game code, configure only your runtime key.
 
 ## Public Runtime Scope
 
