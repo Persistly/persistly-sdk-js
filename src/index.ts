@@ -3,3 +3,4 @@ export * from "./client.js";
 export * from "./errors.js";
 export * from "./file-cache.js";
 export * from "./local-storage-cache.js";
+export * from "./profile.js";

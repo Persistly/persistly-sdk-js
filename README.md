@@ -128,6 +128,58 @@ const result = await client.syncSave(save.saveId, {
 });
 ```
 
+## Profile Save Pattern
+
+A profile save is a normal Persistly save whose `state` contains account-wide data and references to one or more character saves. Use this when one player/account can own multiple characters. Persistly still loads and syncs by `saveId`; there is no public lookup by `playerRef`.
+
+```ts
+import {
+  LocalStorageSaveCache,
+  PersistlyClient,
+  PersistlyProfileCreationError,
+  isPersistlyProfileState,
+} from "@persistly/sdk-js";
+
+const client = new PersistlyClient({
+  runtimeKey: process.env.NEXT_PUBLIC_PERSISTLY_RUNTIME_KEY!,
+  cache: new LocalStorageSaveCache(),
+});
+
+try {
+  const { profileSaveId, profile, character } = await client.createProfileWithCharacter({
+    playerRef: "player-184",
+    profileMetadata: { profileLabel: "Primary account" },
+    accountData: { diamonds: 1200 },
+    characterMetadata: { characterName: "Ayla", slot: "mage" },
+    characterState: { checkpoint: "vault", level: 5 },
+  });
+
+  localStorage.setItem("my-game:profileSaveId", profileSaveId);
+  console.log("Created profile save", profile.saveId);
+  console.log("Created first character save", character.saveId);
+} catch (error) {
+  if (error instanceof PersistlyProfileCreationError) {
+    console.error("Character save was created, but profile creation failed.", error.character.saveId);
+    // Persist error.character.saveId and retry profile creation instead of creating a duplicate character.
+  }
+}
+
+const profileSaveId = localStorage.getItem("my-game:profileSaveId");
+
+if (profileSaveId) {
+  const profile = await client.loadSave(profileSaveId);
+
+  if (isPersistlyProfileState(profile.state)) {
+    const characterSaves = await Promise.all(
+      profile.state.characters.map((character) => client.loadSave(character.saveId)),
+    );
+    console.log(characterSaves);
+  }
+}
+```
+
+Profile `accountData` is client-writable gameplay state, not a trusted payment ledger. Persistly can store derived gameplay state such as `{ diamonds: 1200 }`, but purchase validation must happen through the game owner's trusted payment provider flow. Do not store raw payment transactions, card data, receipts, or invoice history in profile saves.
+
 ## Conflict Handling
 
 Persistly uses optimistic concurrency. If another device has already advanced the canonical save, `syncSave` returns `PersistlySyncStatus.Conflict` and `result.save` contains the server save to keep locally.

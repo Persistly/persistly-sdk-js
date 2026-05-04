@@ -46,6 +46,10 @@
       "types": "./dist/local-storage-cache.d.ts",
       "default": "./dist/local-storage-cache.js"
     },
+    "./profile": {
+      "types": "./dist/profile.d.ts",
+      "default": "./dist/profile.js"
+    },
     "./schema": {
       "types": "./dist/schema.d.ts",
       "default": "./dist/schema.js"

@@ -10,6 +10,7 @@ import {
   type PersistlyErrorCode,
 } from "./errors.js";
 import { validatePayloadLimits } from "./limits.js";
+import { PersistlyProfileCreationError, buildProfileState, type PersistlyProfileState } from "./profile.js";
 import { parseObject as parseSchemaObject, parseSaveSnapshot, type JsonObject, type SaveSnapshot } from "./schema.js";
 
 export type Save = SaveSnapshot;
@@ -28,6 +29,20 @@ export interface SyncSaveInput {
   baseVersion?: number;
   metadata?: JsonObject;
   state: JsonObject;
+}
+
+export interface CreateProfileWithCharacterInput {
+  playerRef?: string;
+  profileMetadata?: JsonObject;
+  accountData?: JsonObject;
+  characterMetadata: JsonObject;
+  characterState: JsonObject;
+}
+
+export interface CreateProfileWithCharacterResult {
+  profileSaveId: string;
+  profile: Save;
+  character: Save;
 }
 
 export interface SyncAcceptedResult {
@@ -106,6 +121,46 @@ export class PersistlyClient {
 
     await this.cache.set(save);
     return save;
+  }
+
+  async createProfileWithCharacter(payload: CreateProfileWithCharacterInput): Promise<CreateProfileWithCharacterResult> {
+    const character = await this.createSave({
+      ...(payload.playerRef === undefined ? {} : { playerRef: payload.playerRef }),
+      metadata: payload.characterMetadata,
+      state: payload.characterState,
+    });
+
+    let profileState: PersistlyProfileState;
+
+    try {
+      profileState = buildProfileState({
+        ...(payload.accountData === undefined ? {} : { accountData: payload.accountData }),
+        characters: [
+          {
+            saveId: character.saveId,
+            metadata: character.metadata,
+          },
+        ],
+      });
+    } catch (error) {
+      throw new PersistlyProfileCreationError("Persistly profile state could not be built after creating the character save.", character, error);
+    }
+
+    try {
+      const profile = await this.createSave({
+        ...(payload.playerRef === undefined ? {} : { playerRef: payload.playerRef }),
+        ...(payload.profileMetadata === undefined ? {} : { metadata: payload.profileMetadata }),
+        state: profileState,
+      });
+
+      return {
+        profileSaveId: profile.saveId,
+        profile,
+        character,
+      };
+    } catch (error) {
+      throw new PersistlyProfileCreationError("Persistly profile save could not be created after creating the character save.", character, error);
+    }
   }
 
   async loadSave(saveId: string): Promise<Save> {
