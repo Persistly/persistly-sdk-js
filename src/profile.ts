@@ -18,17 +18,6 @@ export interface BuildProfileStateInput {
   characters?: PersistlyProfileCharacter[];
 }
 
-export class PersistlyProfileCreationError extends Error {
-  constructor(
-    message: string,
-    readonly character: SaveSnapshot,
-    readonly cause: unknown,
-  ) {
-    super(message);
-    this.name = "PersistlyProfileCreationError";
-  }
-}
-
 export function buildProfileState(input: BuildProfileStateInput = {}): PersistlyProfileState {
   const accountData = input.accountData === undefined ? {} : parseObject(input.accountData, "profile.accountData");
   const characters = input.characters === undefined ? [] : parseProfileCharacters(input.characters);

@@ -30,6 +30,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./autosave": {
+      "types": "./dist/autosave.d.ts",
+      "default": "./dist/autosave.js"
+    },
     "./cache": {
       "types": "./dist/cache.d.ts",
       "default": "./dist/cache.js"

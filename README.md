@@ -13,7 +13,11 @@ npm install @persistly/sdk-js
 ## Quickstart
 
 ```ts
-import { PersistlyClient, PersistlySyncStatus } from "@persistly/sdk-js";
+import {
+  LocalStorageSaveCache,
+  PersistlyClient,
+  PersistlySyncStatus,
+} from "@persistly/sdk-js";
 
 const runtimeKey = process.env.PERSISTLY_RUNTIME_KEY;
 
@@ -23,25 +27,29 @@ if (!runtimeKey) {
 
 const client = new PersistlyClient({
   runtimeKey,
+  cache: new LocalStorageSaveCache(),
 });
 
-const created = await client.createSave({
+const created = await client.createProfile({
   playerRef: "player-184",
-  metadata: {
-    characterName: "Ayla",
-    slotLabel: "Mage",
-  },
-  state: {
+  profileMetadata: { displayName: "Ayla" },
+  accountData: { diamonds: 1200 },
+  characterMetadata: { characterName: "Ayla", slot: "mage" },
+  characterState: {
     checkpoint: "vault",
     coins: 418,
   },
 });
 
-const loaded = await client.loadSave(created.saveId);
+localStorage.setItem("my-game:profileSaveId", created.profileSaveId);
+localStorage.setItem("my-game:profileSessionToken", created.profileSessionToken);
 
-const result = await client.syncSave(created.saveId, {
-  baseVersion: loaded.version,
-  metadata: loaded.metadata,
+const result = await client.syncProfileCharacter({
+  profileSaveId: created.profileSaveId,
+  profileSessionToken: created.profileSessionToken,
+  characterSaveId: created.character.saveId,
+  baseVersion: created.character.version,
+  metadata: created.character.metadata,
   state: {
     checkpoint: "reactor",
     coins: 612,
@@ -61,16 +69,20 @@ The SDK uses the Persistly production runtime API by default. In normal game cod
 
 Supported public runtime operations:
 
-- create save
-- load save by `saveId`
-- sync save by `saveId`
+- create profile with first character and profile session
+- load profile by `profileSaveId` plus `profileSessionToken`
+- create/load/sync profile-owned character saves
+- read runtime sync policy
+- lower-level raw create/load/sync by `saveId` for advanced direct-save integrations
 
 Unsupported public runtime operations:
 
 - lookup by `playerRef`
+- lookup by `externalProfileRef`
 - broad save listing
+- link-code account transfer
 
-`playerRef` is an optional, non-secret developer reference. It is not an authentication identity and it is not queryable through the public runtime API. Persist the returned `saveId` in your game and load/sync by `saveId`.
+`playerRef` and `externalProfileRef` are optional, non-secret developer references. They are not authentication identities, ownership proof, recovery keys, or public lookup inputs. Persist the returned `profileSaveId` and `profileSessionToken` in your game; use that session to load the profile and sync its character saves.
 
 ## Contract Bundle
 
@@ -83,7 +95,9 @@ The pinned bundle is treated as authoritative for request/response semantics and
 - `runtimeKey` must be supplied by the caller
 - the client always targets `https://api.persistly.app`
 - `loadSave`, `syncSave`, and `getLocal` require a non-empty `saveId`
+- `loadProfile`, `createProfileCharacter`, `loadProfileCharacter`, and `syncProfileCharacter` require `profileSaveId` and `profileSessionToken`
 - `syncSave` can infer `baseVersion` from the configured cache when a canonical save is already loaded locally
+- `syncProfileCharacter` can infer `baseVersion` from the configured cache when a canonical character save is already loaded locally
 - `PersistlySyncStatus.Accepted` and `PersistlySyncStatus.Conflict` are the exported status constants for sync results
 
 ## Payload Limits
@@ -103,40 +117,70 @@ The pinned bundle is treated as authoritative for request/response semantics and
 ## Browser Persistence
 
 ```ts
-import { LocalStorageSaveCache, PersistlyClient } from "@persistly/sdk-js";
+import {
+  LocalStorageAutosaveDraftStore,
+  LocalStorageSaveCache,
+  PersistlyAutosaveManager,
+  PersistlyClient,
+} from "@persistly/sdk-js";
 
 const client = new PersistlyClient({
   runtimeKey: process.env.NEXT_PUBLIC_PERSISTLY_RUNTIME_KEY,
   cache: new LocalStorageSaveCache(),
 });
 
-const saveId = localStorage.getItem("my-game:saveId");
-const localSave = saveId ? await client.getLocal(saveId) : null;
+let profileSaveId = localStorage.getItem("my-game:profileSaveId");
+let profileSessionToken = localStorage.getItem("my-game:profileSessionToken");
+let characterSaveId = localStorage.getItem("my-game:characterSaveId");
 
-const save =
-  localSave ??
-  (await client.createSave({
+if (!profileSaveId || !profileSessionToken || !characterSaveId) {
+  const created = await client.createProfile({
     playerRef: "player-184",
-    metadata: { slot: "main" },
-    state: { checkpoint: "intro", coins: 0 },
-  }));
+    accountData: { diamonds: 0 },
+    characterMetadata: { slot: "main" },
+    characterState: { checkpoint: "intro", coins: 0 },
+  });
 
-localStorage.setItem("my-game:saveId", save.saveId);
+  profileSaveId = created.profileSaveId;
+  profileSessionToken = created.profileSessionToken;
+  characterSaveId = created.character.saveId;
 
-const result = await client.syncSave(save.saveId, {
+  localStorage.setItem("my-game:profileSaveId", profileSaveId);
+  localStorage.setItem("my-game:profileSessionToken", profileSessionToken);
+  localStorage.setItem("my-game:characterSaveId", characterSaveId);
+}
+
+const config = await client.getRuntimeConfig();
+const autosave = new PersistlyAutosaveManager({
+  client,
+  profileSaveId,
+  profileSessionToken,
+  characterSaveId,
+  syncPolicy: config.syncPolicy,
+  draftStore: new LocalStorageAutosaveDraftStore(),
+});
+
+await autosave.recordLocalChange({
+  metadata: { slot: "main" },
   state: { checkpoint: "forest", coins: 25 },
 });
 ```
 
-## Profile Save Pattern
+## Examples
 
-A profile save is a normal Persistly save whose `state` contains account-wide data and references to one or more character saves. Use this when one player/account can own multiple characters. Persistly still loads and syncs by `saveId`; there is no public lookup by `playerRef`.
+- `examples/basic.ts` creates a profile with one character and syncs that character.
+- `examples/conflict.ts` shows a profile-scoped character conflict.
+
+Both examples use an in-memory cache so they can be read as small game-flow references. Browser games should persist `profileSaveId`, `profileSessionToken`, and the active character `saveId` in localStorage, IndexedDB, or their own save-file layer.
+
+## Profile Sessions
+
+Profiles are the default model for games. A profile save contains account-wide data and references to one or more character saves. A simple game can always use the first character. If the game later adds multiple characters or external auth, the profile shape is already in place.
 
 ```ts
 import {
   LocalStorageSaveCache,
   PersistlyClient,
-  PersistlyProfileCreationError,
   isPersistlyProfileState,
 } from "@persistly/sdk-js";
 
@@ -145,36 +189,37 @@ const client = new PersistlyClient({
   cache: new LocalStorageSaveCache(),
 });
 
-try {
-  const { profileSaveId, profile, character } = await client.createProfileWithCharacter({
-    playerRef: "player-184",
-    profileMetadata: { profileLabel: "Primary account" },
-    accountData: { diamonds: 1200 },
-    characterMetadata: { characterName: "Ayla", slot: "mage" },
-    characterState: { checkpoint: "vault", level: 5 },
-  });
+const created = await client.createProfile({
+  playerRef: "player-184",
+  externalProfileRef: {
+    provider: "auth0",
+    subject: "auth0|user_123",
+  },
+  profileMetadata: { displayName: "Ayla" },
+  accountData: { diamonds: 1200 },
+  characterMetadata: { characterName: "Ayla", slot: "mage" },
+  characterState: { checkpoint: "vault", level: 5 },
+});
 
-  localStorage.setItem("my-game:profileSaveId", profileSaveId);
-  console.log("Created profile save", profile.saveId);
-  console.log("Created first character save", character.saveId);
-} catch (error) {
-  if (error instanceof PersistlyProfileCreationError) {
-    console.error("Character save was created, but profile creation failed.", error.character.saveId);
-    // Persist error.character.saveId and retry profile creation instead of creating a duplicate character.
-  }
-}
+localStorage.setItem("my-game:profileSaveId", created.profileSaveId);
+localStorage.setItem("my-game:profileSessionToken", created.profileSessionToken);
 
-const profileSaveId = localStorage.getItem("my-game:profileSaveId");
+const profile = await client.loadProfile({
+  profileSaveId: created.profileSaveId,
+  profileSessionToken: created.profileSessionToken,
+});
 
-if (profileSaveId) {
-  const profile = await client.loadSave(profileSaveId);
-
-  if (isPersistlyProfileState(profile.state)) {
-    const characterSaves = await Promise.all(
-      profile.state.characters.map((character) => client.loadSave(character.saveId)),
-    );
-    console.log(characterSaves);
-  }
+if (isPersistlyProfileState(profile.state)) {
+  const characterSaves = await Promise.all(
+    profile.state.characters.map((character) =>
+      client.loadProfileCharacter({
+        profileSaveId: created.profileSaveId,
+        profileSessionToken: created.profileSessionToken,
+        characterSaveId: character.saveId,
+      }),
+    ),
+  );
+  console.log(characterSaves);
 }
 ```
 
@@ -182,11 +227,15 @@ Profile `accountData` is client-writable gameplay state, not a trusted payment l
 
 ## Conflict Handling
 
-Persistly uses optimistic concurrency. If another device has already advanced the canonical save, `syncSave` returns `PersistlySyncStatus.Conflict` and `result.save` contains the server save to keep locally.
+Persistly uses optimistic concurrency. If another device has already advanced the canonical character save, `syncProfileCharacter` returns `PersistlySyncStatus.Conflict` and `result.save` contains the server save to keep locally.
 
 ```ts
-const result = await client.syncSave(save.saveId, {
-  baseVersion: save.version,
+const result = await client.syncProfileCharacter({
+  profileSaveId,
+  profileSessionToken,
+  characterSaveId,
+  baseVersion: character.version,
+  metadata: character.metadata,
   state: nextLocalState,
 });
 

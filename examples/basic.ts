@@ -11,26 +11,31 @@ const client = new PersistlyClient({
   cache: new MemorySaveCache(),
 });
 
-const created = await client.createSave({
+const created = await client.createProfile({
   playerRef: "example-player",
-  metadata: { characterName: "Ayla", slot: 1 },
-  state: { gold: 100, level: 1 },
+  accountData: { diamonds: 0, tutorialComplete: false },
+  characterMetadata: { characterName: "Ayla", slot: "main" },
+  characterState: { gold: 100, level: 1 },
 });
 
-const updated = await client.syncSave(created.saveId, {
+// Store these in localStorage, IndexedDB, a save file, or your own backend.
+const profileSaveId = created.profileSaveId;
+const profileSessionToken = created.profileSessionToken;
+const characterSaveId = created.character.saveId;
+
+const updated = await client.syncProfileCharacter({
+  profileSaveId,
+  profileSessionToken,
+  characterSaveId,
+  baseVersion: created.character.version,
+  metadata: created.character.metadata,
   state: { gold: 125, level: 2 },
 });
 
-const local = await client.getLocal(created.saveId);
+const local = await client.getLocal(characterSaveId);
 
 if (updated.status === PersistlySyncStatus.Accepted) {
-  await client.updateLocal({
-    ...updated.save,
-    metadata: {
-      ...updated.save.metadata,
-      lastScene: "village_square",
-    },
-  });
+  await client.updateLocal(updated.save);
 }
 
 console.log(updated.status, updated.save.version, local?.version);

@@ -1,3 +1,4 @@
+export * from "./autosave.js";
 export * from "./cache.js";
 export * from "./client.js";
 export * from "./errors.js";
