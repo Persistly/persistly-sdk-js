@@ -198,7 +198,7 @@ await autosave.recordLocalChange({
 - `examples/conflict.ts` shows a profile-scoped character conflict.
 - `examples/vite-basic.ts` shows Vite environment variable configuration.
 
-Both examples use an in-memory cache so they can be read as small game-flow references. Browser games should persist `profileSaveId`, `profileSessionToken`, and the active character `saveId` in localStorage, IndexedDB, or their own save-file layer.
+These examples use lightweight local persistence so they can be read as small game-flow references. Browser games should persist `profileSaveId`, `profileSessionToken`, and the active character `saveId` in localStorage, IndexedDB, or their own save-file layer.
 
 ## Profile Sessions
 

@@ -5,6 +5,11 @@ await PersistlyGameSaves.configure({
   storage: "localStorage",
 });
 
+await PersistlyGameSaves.shared.saveSlot("autosave", {
+  checkpoint: "forest",
+  coins: 25,
+});
+
 const result = await PersistlyGameSaves.shared.forceSync("autosave");
 
 if (result.status === PersistlySlotStatus.Synced) {

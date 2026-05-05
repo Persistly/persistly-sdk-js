@@ -1,4 +1,5 @@
 import { PersistlyClient } from "./client.js";
+import type { LocalStorageLike } from "./local-storage-cache.js";
 import type { JsonObject } from "./schema.js";
 
 export const PersistlySlotStatus = {
@@ -35,8 +36,6 @@ export interface PersistlyGameSavesConfig {
   playerRef?: string;
   storage?: PersistlyGameSavesStorage;
   syncIntervalSeconds?: number;
-  /** @internal Test hook until remote profile sync is wired. */
-  syncSlot?: (slotKey: string, slot: SlotRecord) => Promise<unknown>;
 }
 
 interface SlotRecord {
@@ -44,6 +43,16 @@ interface SlotRecord {
   characterSaveId?: string;
   version?: number;
   dirtyState?: JsonObject;
+}
+
+interface SlotStore {
+  get(slotKey: string): Promise<SlotRecord | undefined>;
+  set(slot: SlotRecord): Promise<void>;
+}
+
+interface PersistlyGameSavesInternalOptions {
+  storage?: LocalStorageLike;
+  syncSlot?: (slotKey: string, slot: SlotRecord) => Promise<unknown>;
 }
 
 interface PersistlyGameSavesFacade {
@@ -55,7 +64,7 @@ interface PersistlyGameSavesFacade {
   keepLocalForLater(slotKey: string): Promise<PersistlySlotResult>;
 }
 
-class MemorySlotStore {
+class MemorySlotStore implements SlotStore {
   private readonly slots = new Map<string, SlotRecord>();
 
   async get(slotKey: string): Promise<SlotRecord | undefined> {
@@ -65,6 +74,41 @@ class MemorySlotStore {
 
   async set(slot: SlotRecord): Promise<void> {
     this.slots.set(slot.slotKey, structuredClone(slot));
+  }
+}
+
+class LocalStorageSlotStore implements SlotStore {
+  private readonly storage: LocalStorageLike;
+  private readonly keyPrefix: string;
+
+  constructor(config: PersistlyGameSavesConfig, options: PersistlyGameSavesInternalOptions = {}) {
+    const storage = options.storage ?? (globalThis as { localStorage?: LocalStorageLike }).localStorage;
+
+    if (!storage) {
+      throw new Error("PersistlyGameSaves localStorage storage requires browser localStorage or an explicit storage implementation.");
+    }
+
+    const ownerKey = config.playerRef ?? "anonymous";
+    this.storage = storage;
+    this.keyPrefix = `persistly:game-saves:${encodeURIComponent(config.runtimeKey)}:${encodeURIComponent(ownerKey)}:slot:`;
+  }
+
+  async get(slotKey: string): Promise<SlotRecord | undefined> {
+    const value = this.storage.getItem(this.resolveKey(slotKey));
+    if (value === null) {
+      return undefined;
+    }
+
+    return normalizeSlotRecord(JSON.parse(value) as SlotRecord, slotKey);
+  }
+
+  async set(slot: SlotRecord): Promise<void> {
+    const normalizedSlot = normalizeSlotRecord(slot, slot.slotKey);
+    this.storage.setItem(this.resolveKey(normalizedSlot.slotKey), JSON.stringify(normalizedSlot));
+  }
+
+  private resolveKey(slotKey: string): string {
+    return `${this.keyPrefix}${encodeURIComponent(slotKey)}`;
   }
 }
 
@@ -98,14 +142,17 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
   private readonly client: PersistlyClient;
   private readonly playerRef: string | undefined;
   private readonly syncIntervalSeconds: number | undefined;
-  private readonly slots = new MemorySlotStore();
-  private readonly syncSlot: (slotKey: string, slot: SlotRecord) => Promise<unknown>;
+  private readonly slots: SlotStore;
+  private readonly slotSync: (slotKey: string, slot: SlotRecord) => Promise<unknown>;
 
-  constructor(config: PersistlyGameSavesConfig) {
+  constructor(config: PersistlyGameSavesConfig, options: unknown = {}) {
+    const internalOptions = toInternalOptions(options);
+
     this.client = new PersistlyClient({ runtimeKey: config.runtimeKey });
     this.playerRef = config.playerRef;
     this.syncIntervalSeconds = config.syncIntervalSeconds;
-    this.syncSlot = config.syncSlot ?? (async (_slotKey, slot) => slot);
+    this.slots = createSlotStore(config, internalOptions);
+    this.slotSync = internalOptions.syncSlot ?? (async (_slotKey, slot) => slot);
   }
 
   async loadSlot(slotKey: string): Promise<SlotRecord | undefined> {
@@ -128,7 +175,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     }
 
     try {
-      const save = await this.syncSlot(slotKey, slot);
+      const save = await this.slotSync(slotKey, slot);
       return { status: PersistlySlotStatus.Synced, slotKey, save };
     } catch (error) {
       if (error instanceof Error && /rate/i.test(error.message)) {
@@ -181,4 +228,27 @@ export class PersistlyGameSaves {
   static async configure(config: PersistlyGameSavesConfig): Promise<void> {
     PersistlyGameSaves.shared = await PersistlyGameSaves.start(config);
   }
+}
+
+function createSlotStore(config: PersistlyGameSavesConfig, options: PersistlyGameSavesInternalOptions): SlotStore {
+  if ((config.storage ?? "memory") === "localStorage") {
+    return new LocalStorageSlotStore(config, options);
+  }
+
+  return new MemorySlotStore();
+}
+
+function toInternalOptions(options: unknown): PersistlyGameSavesInternalOptions {
+  if (options && typeof options === "object") {
+    return options as PersistlyGameSavesInternalOptions;
+  }
+
+  return {};
+}
+
+function normalizeSlotRecord(slot: SlotRecord, fallbackSlotKey: string): SlotRecord {
+  return structuredClone({
+    ...slot,
+    slotKey: slot.slotKey ?? fallbackSlotKey,
+  });
 }
