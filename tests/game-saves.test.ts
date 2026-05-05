@@ -29,6 +29,34 @@ class FakeStorage {
   }
 }
 
+async function withFakeLocalStorage<T>(storage: FakeStorage, run: () => Promise<T>): Promise<T> {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: storage,
+  });
+
+  try {
+    return await run();
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(globalThis, "localStorage", descriptor);
+    } else {
+      delete (globalThis as { localStorage?: unknown }).localStorage;
+    }
+  }
+}
+
+function overrideRemoteSync(
+  persistly: PersistlyGameSavesInstance,
+  runRemoteSync: () => Promise<unknown>,
+): void {
+  Object.defineProperty(persistly, "runRemoteSync", {
+    configurable: true,
+    value: runRemoteSync,
+  });
+}
+
 test("exports stable slot status constants", () => {
   assert.equal(PersistlySlotStatus.LocalSaved, "local_saved");
   assert.equal(PersistlySlotStatus.Synced, "synced");
@@ -96,25 +124,21 @@ test("memory storage does not persist slot state across facade instances", async
 
 test("localStorage storage persists slot state across facade instances", async () => {
   const storage = new FakeStorage();
-  const first = new PersistlyGameSavesInstance(
-    {
+  const slot = await withFakeLocalStorage(storage, async () => {
+    const first = new PersistlyGameSavesInstance({
       runtimeKey: "ps_test_example",
       storage: "localStorage",
-    },
-    { storage },
-  );
+    });
 
-  await first.saveSlot("autosave", { coins: 42 });
+    await first.saveSlot("autosave", { coins: 42 });
 
-  const second = new PersistlyGameSavesInstance(
-    {
+    const second = new PersistlyGameSavesInstance({
       runtimeKey: "ps_test_example",
       storage: "localStorage",
-    },
-    { storage },
-  );
+    });
 
-  const slot = await second.loadSlot("autosave");
+    return await second.loadSlot("autosave");
+  });
 
   assert.equal(slot?.slotKey, "autosave");
   assert.deepEqual(slot?.dirtyState, { coins: 42 });
@@ -171,17 +195,13 @@ test("forceSync returns Synced for dirty local state", async () => {
 });
 
 test("forceSync maps rate errors to RateLimited for dirty local state", async () => {
-  const persistly = new PersistlyGameSavesInstance(
-    {
-      runtimeKey: "ps_test_example",
-      storage: "memory",
-    },
-    {
-      syncSlot: async () => {
-        throw new Error("rate limited");
-      },
-    },
-  );
+  const persistly = new PersistlyGameSavesInstance({
+    runtimeKey: "ps_test_example",
+    storage: "memory",
+  });
+  overrideRemoteSync(persistly, async () => {
+    throw new Error("rate limited");
+  });
 
   await persistly.saveSlot("autosave", { coins: 42 });
   const result = await persistly.forceSync("autosave");
@@ -192,17 +212,13 @@ test("forceSync maps rate errors to RateLimited for dirty local state", async ()
 
 test("forceSync maps network and offline errors to Offline for dirty local state", async () => {
   for (const message of ["network unavailable", "offline"]) {
-    const persistly = new PersistlyGameSavesInstance(
-      {
-        runtimeKey: "ps_test_example",
-        storage: "memory",
-      },
-      {
-        syncSlot: async () => {
-          throw new Error(message);
-        },
-      },
-    );
+    const persistly = new PersistlyGameSavesInstance({
+      runtimeKey: "ps_test_example",
+      storage: "memory",
+    });
+    overrideRemoteSync(persistly, async () => {
+      throw new Error(message);
+    });
 
     await persistly.saveSlot("autosave", { coins: 42 });
     const result = await persistly.forceSync("autosave");
@@ -230,7 +246,7 @@ test("public game saves config rejects syncSlot", async () => {
   await writeFile(
     typecheckFile,
     `
-      import type { PersistlyGameSavesConfig } from "${process.cwd()}/src/index.ts";
+      import { PersistlyGameSavesInstance, type PersistlyGameSavesConfig } from "${process.cwd()}/src/index.ts";
 
       const config: PersistlyGameSavesConfig = {
         runtimeKey: "ps_test_example",
@@ -240,6 +256,9 @@ test("public game saves config rejects syncSlot", async () => {
       };
 
       void config;
+
+      // @ts-expect-error constructor must not expose internal test hooks.
+      new PersistlyGameSavesInstance(config, { syncSlot: async () => ({ ok: true }) });
     `,
   );
 
