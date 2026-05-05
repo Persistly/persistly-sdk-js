@@ -1,6 +1,7 @@
 export type PersistlyErrorCode =
   | "invalid_request"
   | "unauthorized"
+  | "forbidden"
   | "not_found"
   | "conflict"
   | "rate_limited"
@@ -30,6 +31,13 @@ export class PersistlyUnauthorizedError extends PersistlyApiError {
   constructor(message: string, details?: Record<string, unknown>, status = 401) {
     super(status, "unauthorized", message, details);
     this.name = "PersistlyUnauthorizedError";
+  }
+}
+
+export class PersistlyForbiddenError extends PersistlyApiError {
+  constructor(message: string, details?: Record<string, unknown>, status = 403) {
+    super(status, "forbidden", message, details);
+    this.name = "PersistlyForbiddenError";
   }
 }
 
@@ -101,6 +109,8 @@ export function createPersistlyApiError(
       return new PersistlyInvalidRequestError(message, details, status);
     case "unauthorized":
       return new PersistlyUnauthorizedError(message, details, status);
+    case "forbidden":
+      return new PersistlyForbiddenError(message, details, status);
     case "not_found":
       return new PersistlyNotFoundError(message, details, status);
     case "conflict":

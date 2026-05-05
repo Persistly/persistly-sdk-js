@@ -1,6 +1,6 @@
 {
   "name": "@persistly/sdk-js",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "JavaScript SDK for Persistly cloud save sync.",
   "license": "Apache-2.0",
   "type": "module",
@@ -30,6 +30,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./autosave": {
+      "types": "./dist/autosave.d.ts",
+      "default": "./dist/autosave.js"
+    },
     "./cache": {
       "types": "./dist/cache.d.ts",
       "default": "./dist/cache.js"
@@ -41,6 +45,18 @@
     "./file-cache": {
       "types": "./dist/file-cache.d.ts",
       "default": "./dist/file-cache.js"
+    },
+    "./game-saves": {
+      "types": "./dist/game-saves.d.ts",
+      "default": "./dist/game-saves.js"
+    },
+    "./local-storage-cache": {
+      "types": "./dist/local-storage-cache.d.ts",
+      "default": "./dist/local-storage-cache.js"
+    },
+    "./profile": {
+      "types": "./dist/profile.d.ts",
+      "default": "./dist/profile.js"
     },
     "./schema": {
       "types": "./dist/schema.d.ts",

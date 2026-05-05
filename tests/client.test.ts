@@ -5,10 +5,12 @@ import {
   DEFAULT_PERSISTLY_API_BASE_URL,
   MemorySaveCache,
   PersistlyClient,
+  PersistlyForbiddenError,
   PersistlyPayloadTooLargeError,
   PersistlyServerError,
   PersistlySyncStatus,
   type SaveEnvelope,
+  type ProfileEnvelope,
   type SyncConflictResult,
 } from "../src/index.js";
 
@@ -24,7 +26,7 @@ test("createSave posts the contract payload and caches the canonical save", asyn
   const expected: SaveEnvelope = {
     save: {
       saveId: "sv_create",
-      externalUserId: "auth0|123",
+      playerRef: "player-184",
       metadata: { slot: 2 },
       state: { level: 1 },
       version: 1,
@@ -44,7 +46,7 @@ test("createSave posts the contract payload and caches the canonical save", asyn
   });
 
   const created = await client.createSave({
-    externalUserId: "auth0|123",
+    playerRef: "player-184",
     metadata: { slot: 2 },
     state: { level: 1 },
   });
@@ -55,7 +57,7 @@ test("createSave posts the contract payload and caches the canonical save", asyn
   assert.equal(requests[0]?.init?.method, "POST");
   assert.match(String(requests[0]?.init?.headers && new Headers(requests[0].init.headers).get("authorization")), /^Bearer ps_test_runtime$/);
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
-    externalUserId: "auth0|123",
+    playerRef: "player-184",
     metadata: { slot: 2 },
     state: { level: 1 },
   });
@@ -70,7 +72,7 @@ test("createSave defaults to the public Persistly API origin when no base URL is
       return createJsonResponse(201, {
         save: {
           saveId: "sv_default_origin",
-          externalUserId: null,
+          playerRef: null,
           metadata: {},
           state: { level: 1 },
           version: 1,
@@ -97,7 +99,7 @@ test("createSave ignores legacy baseUrl overrides and still uses the public Pers
       return createJsonResponse(201, {
         save: {
           saveId: "sv_ignore_override",
-          externalUserId: null,
+          playerRef: null,
           metadata: {},
           state: { level: 1 },
           version: 1,
@@ -123,7 +125,7 @@ test("loadSave caches the canonical save from the runtime API", async () => {
   const expected: SaveEnvelope = {
     save: {
       saveId: "sv_load",
-      externalUserId: null,
+      playerRef: null,
       metadata: {},
       state: { level: 5 },
       version: 7,
@@ -165,7 +167,7 @@ test("syncSave uses the cached version and stores accepted saves", async () => {
   const cache = new MemorySaveCache();
   await cache.set({
     saveId: "sv_sync",
-    externalUserId: "auth0|123",
+    playerRef: "player-184",
     metadata: { slot: 2 },
     state: { gold: 100 },
     version: 3,
@@ -183,7 +185,7 @@ test("syncSave uses the cached version and stores accepted saves", async () => {
         status: "accepted",
         save: {
           saveId: "sv_sync",
-          externalUserId: "auth0|123",
+          playerRef: "player-184",
           metadata: { slot: 2 },
           state: { gold: 125 },
           version: 4,
@@ -211,7 +213,7 @@ test("syncSave stores canonical server state on conflict", async () => {
   const cache = new MemorySaveCache();
   await cache.set({
     saveId: "sv_sync_conflict",
-    externalUserId: "auth0|123",
+    playerRef: "player-184",
     metadata: { slot: 2 },
     state: { gold: 100 },
     version: 3,
@@ -227,7 +229,7 @@ test("syncSave stores canonical server state on conflict", async () => {
         status: "conflict",
         save: {
           saveId: "sv_sync_conflict",
-          externalUserId: "auth0|123",
+          playerRef: "player-184",
           metadata: { slot: 2 },
           state: { gold: 140 },
           version: 5,
@@ -288,7 +290,7 @@ test("updateLocal writes a canonical save to the configured cache without callin
 
   await client.updateLocal({
     saveId: "sv_local",
-    externalUserId: "auth0|123",
+    playerRef: "player-184",
     metadata: { slot: 4 },
     state: { level: 9 },
     version: 11,
@@ -299,7 +301,7 @@ test("updateLocal writes a canonical save to the configured cache without callin
   assert.equal(fetchCalls, 0);
   assert.deepEqual(await cache.get("sv_local"), {
     saveId: "sv_local",
-    externalUserId: "auth0|123",
+    playerRef: "player-184",
     metadata: { slot: 4 },
     state: { level: 9 },
     version: 11,
@@ -312,7 +314,7 @@ test("getLocal reads from the configured cache without calling fetch", async () 
   const cache = new MemorySaveCache();
   await cache.set({
     saveId: "sv_local_read",
-    externalUserId: null,
+    playerRef: null,
     metadata: { slot: 1 },
     state: { level: 2 },
     version: 3,
@@ -340,7 +342,7 @@ test("getLocal reads from the configured cache without calling fetch", async () 
   assert.equal(fetchCalls, 0);
   assert.deepEqual(local, {
     saveId: "sv_local_read",
-    externalUserId: null,
+    playerRef: null,
     metadata: { slot: 1 },
     state: { level: 2 },
     version: 3,
@@ -427,7 +429,7 @@ test("updateLocal rejects saves with non-contract version or timestamp fields", 
     () =>
       client.updateLocal({
         saveId: "sv_invalid",
-        externalUserId: null,
+        playerRef: null,
         metadata: {},
         state: {},
         version: 1.5,
@@ -469,12 +471,188 @@ test("API errors preserve the contract code, message, and details", async () => 
   );
 });
 
-test("client does not expose any external user lookup helpers", () => {
+test("client does not expose any player ref lookup helpers", () => {
   const client = new PersistlyClient({
     runtimeKey: "ps_test_runtime",
   });
 
-  assert.equal(typeof (client as Record<string, unknown>).loadSaveByExternalUserId, "undefined");
-  assert.equal(typeof (client as Record<string, unknown>).findSaveByExternalUserId, "undefined");
+  assert.equal(typeof (client as Record<string, unknown>).loadSaveByPlayerRef, "undefined");
+  assert.equal(typeof (client as Record<string, unknown>).findSaveByPlayerRef, "undefined");
   assert.equal(typeof (client as Record<string, unknown>).listSaves, "undefined");
+});
+
+test("createProfile posts profile payload, session-caches saves, and returns session token", async () => {
+  const cache = new MemorySaveCache();
+  const expected: ProfileEnvelope = {
+    profileSaveId: "sv_profile",
+    profileSessionToken: "pst_session",
+    syncPolicy: {
+      minRemoteSyncIntervalSeconds: 60,
+      forceSyncCooldownSeconds: 10,
+      syncOnAppBackground: true,
+      syncOnAppForeground: true,
+      syncOnReconnect: true,
+      maxQueuedLocalSnapshots: 25,
+    },
+    profile: {
+      saveId: "sv_profile",
+      playerRef: "player-184",
+      metadata: { profileLabel: "Main" },
+      state: {
+        schema: "persistly.profile.v1",
+        accountData: { diamonds: 1200 },
+        characters: [{ saveId: "sv_character", metadata: { characterName: "Ayla" } }],
+      },
+      version: 1,
+      createdAt: "2026-04-09T10:00:00Z",
+      updatedAt: "2026-04-09T10:00:00Z",
+    },
+    character: {
+      saveId: "sv_character",
+      playerRef: "player-184",
+      metadata: { characterName: "Ayla" },
+      state: { level: 1 },
+      version: 1,
+      createdAt: "2026-04-09T10:00:00Z",
+      updatedAt: "2026-04-09T10:00:00Z",
+    },
+  };
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    cache,
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return createJsonResponse(201, expected);
+    },
+  });
+
+  const result = await client.createProfile({
+    playerRef: "player-184",
+    externalProfileRef: { provider: "auth0", subject: "auth0|abc123" },
+    profileMetadata: { profileLabel: "Main" },
+    accountData: { diamonds: 1200 },
+    characterMetadata: { characterName: "Ayla" },
+    characterState: { level: 1 },
+  });
+
+  assert.equal(result.profileSessionToken, "pst_session");
+  assert.equal(result.profileSaveId, "sv_profile");
+  assert.deepEqual(await cache.get("sv_profile"), expected.profile);
+  assert.deepEqual(await cache.get("sv_character"), expected.character);
+  assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/profiles`);
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    playerRef: "player-184",
+    externalProfileRef: { provider: "auth0", subject: "auth0|abc123" },
+    profileMetadata: { profileLabel: "Main" },
+    accountData: { diamonds: 1200 },
+    characterMetadata: { characterName: "Ayla" },
+    characterState: { level: 1 },
+  });
+});
+
+test("profile session is sent when loading and syncing profile characters", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+
+      if (String(input).endsWith("/characters/sv_character/sync")) {
+        return createJsonResponse(200, {
+          status: "accepted",
+          save: {
+            saveId: "sv_character",
+            playerRef: "player-184",
+            metadata: { characterName: "Ayla" },
+            state: { level: 2 },
+            version: 2,
+            createdAt: "2026-04-09T10:00:00Z",
+            updatedAt: "2026-04-09T10:01:00Z",
+          },
+        });
+      }
+
+      return createJsonResponse(200, {
+        save: {
+          saveId: "sv_character",
+          playerRef: "player-184",
+          metadata: { characterName: "Ayla" },
+          state: { level: 1 },
+          version: 1,
+          createdAt: "2026-04-09T10:00:00Z",
+          updatedAt: "2026-04-09T10:00:00Z",
+        },
+      });
+    },
+  });
+
+  await client.loadProfileCharacter({
+    profileSaveId: "sv_profile",
+    characterSaveId: "sv_character",
+    profileSessionToken: "pst_session",
+  });
+  const result = await client.syncProfileCharacter({
+    profileSaveId: "sv_profile",
+    characterSaveId: "sv_character",
+    profileSessionToken: "pst_session",
+    baseVersion: 1,
+    state: { level: 2 },
+  });
+
+  assert.equal(result.status, PersistlySyncStatus.Accepted);
+  assert.equal(new Headers(requests[0]?.init?.headers).get("x-persistly-profile-session"), "pst_session");
+  assert.equal(new Headers(requests[1]?.init?.headers).get("x-persistly-profile-session"), "pst_session");
+  assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/profiles/sv_profile/characters/sv_character`);
+  assert.equal(requests[1]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/profiles/sv_profile/characters/sv_character/sync`);
+});
+
+test("profile session forbidden responses surface as typed forbidden errors", async () => {
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async () =>
+      createJsonResponse(403, {
+        error: {
+          code: "forbidden",
+          message: "Profile session cannot access this character.",
+        },
+      }),
+  });
+
+  await assert.rejects(
+    () =>
+      client.loadProfileCharacter({
+        profileSaveId: "sv_profile",
+        profileSessionToken: "pst_session",
+        characterSaveId: "sv_character",
+      }),
+    (error) => {
+      assert.ok(error instanceof PersistlyForbiddenError);
+      assert.equal(error.status, 403);
+      assert.equal(error.code, "forbidden");
+      return true;
+    },
+  );
+});
+
+test("getRuntimeConfig returns the sync policy", async () => {
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async () =>
+      createJsonResponse(200, {
+        syncPolicy: {
+          minRemoteSyncIntervalSeconds: 40,
+          forceSyncCooldownSeconds: 10,
+          syncOnAppBackground: true,
+          syncOnAppForeground: true,
+          syncOnReconnect: true,
+          maxQueuedLocalSnapshots: 25,
+        },
+      }),
+  });
+
+  const config = await client.getRuntimeConfig();
+
+  assert.equal(config.syncPolicy.minRemoteSyncIntervalSeconds, 40);
+  assert.equal(config.syncPolicy.forceSyncCooldownSeconds, 10);
 });

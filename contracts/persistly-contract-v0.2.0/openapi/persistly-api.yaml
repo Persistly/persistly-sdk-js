@@ -13,7 +13,7 @@ info:
   license:
     name: Proprietary
     url: https://persistly.app/terms
-  version: 0.1.0
+  version: 0.2.0
 servers:
   - url: https://api.persistly.app
     description: Public production runtime API
@@ -22,6 +22,8 @@ tags:
     description: Public operational endpoints for availability checks.
   - name: Save Sync
     description: Create, load, and sync saved game state by saveId.
+  - name: Profiles
+    description: Profile sessions and character saves for player-owned save sync.
   - name: Billing Webhooks
     description: Provider webhook endpoints used by Persistly billing automation.
 paths:
@@ -61,7 +63,7 @@ paths:
               default:
                 summary: Create a new save
                 value:
-                  externalUserId: auth0|123
+                  playerRef: player-184
                   metadata:
                     characterName: Ayla
                     slot: 2
@@ -81,7 +83,7 @@ paths:
                   value:
                     save:
                       saveId: sv_01HXYZ
-                      externalUserId: auth0|123
+                      playerRef: player-184
                       metadata:
                         characterName: Ayla
                         slot: 2
@@ -95,6 +97,190 @@ paths:
           $ref: '#/components/responses/InvalidRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/runtime-config:
+    get:
+      operationId: getRuntimeConfig
+      tags: [Profiles]
+      summary: Get runtime config
+      description: Return SDK runtime configuration such as dashboard-controlled sync policy.
+      security:
+        - RuntimeKey: []
+      responses:
+        '200':
+          description: Runtime configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeConfigResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/profiles:
+    post:
+      operationId: createProfile
+      tags: [Profiles]
+      summary: Create profile and first character
+      description: Create a profile save, first character save, and one profile session token. externalProfileRef is stored as a non-authoritative reference only and is not publicly resolvable.
+      security:
+        - RuntimeKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProfileRequest'
+      responses:
+        '201':
+          description: Profile created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileEnvelopeResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/profiles/{profileSaveId}:
+    get:
+      operationId: loadProfile
+      tags: [Profiles]
+      summary: Load profile
+      description: Load a profile save using a profile session token. The session can access only the profile it belongs to.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/ProfileSaveId'
+        - $ref: '#/components/parameters/ProfileSession'
+      responses:
+        '200':
+          description: Profile loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileEnvelopeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/profiles/{profileSaveId}/characters:
+    post:
+      operationId: createProfileCharacter
+      tags: [Profiles]
+      summary: Add character
+      description: Create a character save under an existing profile and append its saveId to the profile state.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/ProfileSaveId'
+        - $ref: '#/components/parameters/ProfileSession'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProfileCharacterRequest'
+      responses:
+        '201':
+          description: Character created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileEnvelopeResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/profiles/{profileSaveId}/characters/{characterSaveId}:
+    get:
+      operationId: loadProfileCharacter
+      tags: [Profiles]
+      summary: Load profile character
+      description: Load a character save only when the profile session owns the profile and the character belongs to that profile.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/ProfileSaveId'
+        - $ref: '#/components/parameters/CharacterSaveId'
+        - $ref: '#/components/parameters/ProfileSession'
+      responses:
+        '200':
+          description: Character loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveEnvelopeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/profiles/{profileSaveId}/characters/{characterSaveId}/sync:
+    post:
+      operationId: syncProfileCharacter
+      tags: [Profiles]
+      summary: Sync profile character
+      description: Sync a character save only when the profile session owns the profile and the character belongs to that profile.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/ProfileSaveId'
+        - $ref: '#/components/parameters/CharacterSaveId'
+        - $ref: '#/components/parameters/ProfileSession'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncSaveRequest'
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncAcceptedResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncConflictResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
         '429':
@@ -128,7 +314,7 @@ paths:
                   value:
                     save:
                       saveId: sv_01HXYZ
-                      externalUserId: auth0|123
+                      playerRef: player-184
                       metadata:
                         characterName: Ayla
                         slot: 2
@@ -191,7 +377,7 @@ paths:
                     status: accepted
                     save:
                       saveId: sv_01HXYZ
-                      externalUserId: auth0|123
+                      playerRef: player-184
                       metadata:
                         characterName: Ayla
                         slot: 2
@@ -214,7 +400,7 @@ paths:
                     status: conflict
                     save:
                       saveId: sv_01HXYZ
-                      externalUserId: auth0|123
+                      playerRef: player-184
                       metadata:
                         characterName: Ayla
                         slot: 2
@@ -271,6 +457,26 @@ components:
     RuntimeKey:
       type: http
       scheme: bearer
+  parameters:
+    ProfileSaveId:
+      name: profileSaveId
+      in: path
+      required: true
+      schema:
+        type: string
+    CharacterSaveId:
+      name: characterSaveId
+      in: path
+      required: true
+      schema:
+        type: string
+    ProfileSession:
+      name: X-Persistly-Profile-Session
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Per-device profile session token returned when a profile is created.
   schemas:
     HealthResponse:
       type: object
@@ -280,12 +486,13 @@ components:
           type: boolean
     Save:
       type: object
-      required: [saveId, externalUserId, metadata, state, version, createdAt, updatedAt]
+      required: [saveId, playerRef, metadata, state, version, createdAt, updatedAt]
       properties:
         saveId:
           type: string
-        externalUserId:
+        playerRef:
           type: [string, "null"]
+          description: Optional developer-owned, non-secret player/account reference. It is not an authentication identity and is not queryable through the public runtime API; games must persist and load by saveId.
         metadata:
           type: object
           x-max-bytes: 16384
@@ -308,8 +515,9 @@ components:
       type: object
       required: [state]
       properties:
-        externalUserId:
+        playerRef:
           type: string
+          description: Optional developer-owned, non-secret player/account reference. It is not an authentication identity and is not queryable through the public runtime API; games must persist and load by saveId.
         metadata:
           type: object
           x-max-bytes: 16384
@@ -334,6 +542,92 @@ components:
           type: object
           x-max-bytes: 262144
           additionalProperties: true
+    ExternalProfileRef:
+      type: object
+      required: [provider, subject]
+      description: Optional non-authoritative identity reference stored for future trusted auth migration. It is not public lookup or proof of ownership.
+      properties:
+        provider:
+          type: string
+        subject:
+          type: string
+    SyncPolicy:
+      type: object
+      required: [minRemoteSyncIntervalSeconds, forceSyncCooldownSeconds, syncOnAppBackground, syncOnAppForeground, syncOnReconnect, maxQueuedLocalSnapshots]
+      properties:
+        minRemoteSyncIntervalSeconds:
+          type: integer
+          minimum: 1
+        forceSyncCooldownSeconds:
+          type: integer
+          minimum: 1
+        syncOnAppBackground:
+          type: boolean
+        syncOnAppForeground:
+          type: boolean
+        syncOnReconnect:
+          type: boolean
+        maxQueuedLocalSnapshots:
+          type: integer
+          minimum: 1
+    RuntimeConfigResponse:
+      type: object
+      required: [syncPolicy]
+      properties:
+        syncPolicy:
+          $ref: '#/components/schemas/SyncPolicy'
+    CreateProfileRequest:
+      type: object
+      required: [characterMetadata, characterState]
+      properties:
+        playerRef:
+          type: string
+          description: Optional non-secret developer reference. It is not public lookup or auth.
+        externalProfileRef:
+          $ref: '#/components/schemas/ExternalProfileRef'
+        profileMetadata:
+          type: object
+          x-max-bytes: 16384
+          additionalProperties: true
+        accountData:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+        characterMetadata:
+          type: object
+          x-max-bytes: 16384
+          additionalProperties: true
+        characterState:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+    CreateProfileCharacterRequest:
+      type: object
+      required: [metadata, state]
+      properties:
+        metadata:
+          type: object
+          x-max-bytes: 16384
+          additionalProperties: true
+        state:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+    ProfileEnvelopeResponse:
+      type: object
+      required: [profileSaveId, profile]
+      properties:
+        profileSaveId:
+          type: string
+        profileSessionToken:
+          type: string
+          description: Returned only on profile creation. Store locally; it authorizes access only to this profile and its characters.
+        profile:
+          $ref: '#/components/schemas/Save'
+        character:
+          $ref: '#/components/schemas/Save'
+        syncPolicy:
+          $ref: '#/components/schemas/SyncPolicy'
     SaveEnvelopeResponse:
       type: object
       required: [save]
@@ -387,7 +681,7 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_request, unauthorized, not_found, conflict, rate_limited, payload_too_large, server_error]
+              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, rate_limited, payload_too_large, server_error]
             message:
               type: string
             details:
@@ -433,6 +727,19 @@ components:
                 error:
                   code: not_found
                   message: Save not found.
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Profile session cannot access this resource
+              value:
+                error:
+                  code: forbidden
+                  message: Profile session cannot access this resource.
     PayloadTooLarge:
       description: Payload too large
       content:

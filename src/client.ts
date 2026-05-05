@@ -19,12 +19,77 @@ export interface SaveEnvelope {
 }
 
 export interface CreateSaveInput {
-  externalUserId?: string;
+  playerRef?: string;
   metadata?: JsonObject;
   state: JsonObject;
 }
 
 export interface SyncSaveInput {
+  baseVersion?: number;
+  metadata?: JsonObject;
+  state: JsonObject;
+}
+
+export interface ExternalProfileRef {
+  provider: string;
+  subject: string;
+}
+
+export interface SyncPolicy {
+  minRemoteSyncIntervalSeconds: number;
+  forceSyncCooldownSeconds: number;
+  syncOnAppBackground: boolean;
+  syncOnAppForeground: boolean;
+  syncOnReconnect: boolean;
+  maxQueuedLocalSnapshots: number;
+}
+
+export interface RuntimeConfig {
+  syncPolicy: SyncPolicy;
+}
+
+export interface CreateProfileInput {
+  playerRef?: string;
+  externalProfileRef?: ExternalProfileRef;
+  profileMetadata?: JsonObject;
+  accountData?: JsonObject;
+  characterMetadata: JsonObject;
+  characterState: JsonObject;
+}
+
+export interface ProfileEnvelope {
+  profileSaveId: string;
+  profileSessionToken?: string;
+  profile: Save;
+  character?: Save;
+  syncPolicy?: SyncPolicy;
+}
+
+export interface CreatedProfileEnvelope extends ProfileEnvelope {
+  profileSessionToken: string;
+  character: Save;
+  syncPolicy: SyncPolicy;
+}
+
+export interface ProfileCharacterEnvelope extends ProfileEnvelope {
+  character: Save;
+}
+
+export interface ProfileSessionInput {
+  profileSaveId: string;
+  profileSessionToken: string;
+}
+
+export interface ProfileCharacterInput extends ProfileSessionInput {
+  characterSaveId: string;
+}
+
+export interface CreateProfileCharacterInput extends ProfileSessionInput {
+  metadata: JsonObject;
+  state: JsonObject;
+}
+
+export interface SyncProfileCharacterInput extends ProfileCharacterInput {
   baseVersion?: number;
   metadata?: JsonObject;
   state: JsonObject;
@@ -106,6 +171,121 @@ export class PersistlyClient {
 
     await this.cache.set(save);
     return save;
+  }
+
+  async createProfile(payload: CreateProfileInput): Promise<CreatedProfileEnvelope> {
+    const response = await this.requestJson("/api/v1/profiles", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    const envelope = requireCreatedProfileEnvelope(parseProfileEnvelope(response));
+
+    await this.cache.set(envelope.profile);
+    if (envelope.character) {
+      await this.cache.set(envelope.character);
+    }
+
+    return envelope;
+  }
+
+  async loadProfile(payload: ProfileSessionInput): Promise<Save> {
+    assertSaveId(payload.profileSaveId, "loadProfile");
+    assertProfileSessionToken(payload.profileSessionToken, "loadProfile");
+    const response = await this.requestJson(`/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}`, {
+      method: "GET",
+      headers: profileSessionHeaders(payload.profileSessionToken),
+    });
+    const profile = parseProfileEnvelope(response).profile;
+
+    await this.cache.set(profile);
+    return profile;
+  }
+
+  async createProfileCharacter(payload: CreateProfileCharacterInput): Promise<ProfileCharacterEnvelope> {
+    assertSaveId(payload.profileSaveId, "createProfileCharacter");
+    assertProfileSessionToken(payload.profileSessionToken, "createProfileCharacter");
+    validatePayloadLimits({ metadata: payload.metadata, state: payload.state });
+    const response = await this.requestJson(`/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}/characters`, {
+      method: "POST",
+      headers: profileSessionHeaders(payload.profileSessionToken),
+      body: JSON.stringify({
+        metadata: payload.metadata,
+        state: payload.state,
+      }),
+    });
+    const envelope = requireProfileCharacterEnvelope(parseProfileEnvelope(response));
+
+    await this.cache.set(envelope.profile);
+    if (envelope.character) {
+      await this.cache.set(envelope.character);
+    }
+    return envelope;
+  }
+
+  async loadProfileCharacter(payload: ProfileCharacterInput): Promise<Save> {
+    assertSaveId(payload.profileSaveId, "loadProfileCharacter");
+    assertSaveId(payload.characterSaveId, "loadProfileCharacter");
+    assertProfileSessionToken(payload.profileSessionToken, "loadProfileCharacter");
+    const response = await this.requestJson(
+      `/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}/characters/${encodeURIComponent(payload.characterSaveId)}`,
+      {
+        method: "GET",
+        headers: profileSessionHeaders(payload.profileSessionToken),
+      },
+    );
+    const save = parseSaveEnvelope(response).save;
+
+    await this.cache.set(save);
+    return save;
+  }
+
+  async syncProfileCharacter(payload: SyncProfileCharacterInput): Promise<SyncSaveResult> {
+    assertSaveId(payload.profileSaveId, "syncProfileCharacter");
+    assertSaveId(payload.characterSaveId, "syncProfileCharacter");
+    assertProfileSessionToken(payload.profileSessionToken, "syncProfileCharacter");
+    validatePayloadLimits(payload);
+    const baseVersion = payload.baseVersion ?? (await this.cache.get(payload.characterSaveId))?.version;
+
+    if (!baseVersion) {
+      throw new PersistlyConfigurationError(
+        "syncProfileCharacter requires baseVersion unless the cache already holds a canonical save for this characterSaveId.",
+      );
+    }
+
+    const response = await this.requestRaw(
+      `/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}/characters/${encodeURIComponent(payload.characterSaveId)}/sync`,
+      {
+        method: "POST",
+        headers: profileSessionHeaders(payload.profileSessionToken),
+        body: JSON.stringify({
+          baseVersion,
+          metadata: payload.metadata,
+          state: payload.state,
+        }),
+      },
+    );
+    const json = await parseJsonResponse(response);
+
+    if (response.status === 200) {
+      const result = parseAcceptedSyncResult(json);
+      await this.cache.set(result.save);
+      return result;
+    }
+
+    if (response.status === 409) {
+      const result = parseConflictSyncResult(json);
+      await this.cache.set(result.save);
+      return result;
+    }
+
+    throw parseApiError(response.status, json);
+  }
+
+  async getRuntimeConfig(): Promise<RuntimeConfig> {
+    const response = await this.requestJson("/api/v1/runtime-config", {
+      method: "GET",
+    });
+    return parseRuntimeConfig(response);
   }
 
   async loadSave(saveId: string): Promise<Save> {
@@ -192,6 +372,19 @@ function assertSaveId(saveId: string, operation: string): string {
   return canonicalSaveId;
 }
 
+function assertProfileSessionToken(token: string, operation: string): string {
+  if (typeof token !== "string" || token.trim() === "") {
+    throw new PersistlyConfigurationError(`${operation} requires a non-empty profileSessionToken.`);
+  }
+  return token;
+}
+
+function profileSessionHeaders(token: string): HeadersInit {
+  return {
+    "x-persistly-profile-session": token,
+  };
+}
+
 function bindFetch(fetchImpl: typeof globalThis.fetch | undefined): typeof globalThis.fetch | undefined {
   if (typeof fetchImpl !== "function") {
     return fetchImpl;
@@ -241,6 +434,101 @@ function parseSaveEnvelope(value: unknown): SaveEnvelope {
   return {
     save: parseSave(record.save),
   };
+}
+
+function parseProfileEnvelope(value: unknown): ProfileEnvelope {
+  const record = parseObject(value, "Profile response");
+  const profileSaveId = record.profileSaveId;
+  const profileSessionToken = record.profileSessionToken;
+  const profile = parseSave(record.profile);
+  const character = record.character === undefined || record.character === null ? undefined : parseSave(record.character);
+  const syncPolicy = record.syncPolicy === undefined ? undefined : parseSyncPolicy(record.syncPolicy);
+
+  if (typeof profileSaveId !== "string" || profileSaveId.trim() === "") {
+    throw new PersistlyConfigurationError("Profile response profileSaveId must be a non-empty string.");
+  }
+
+  if (!(profileSessionToken === undefined || typeof profileSessionToken === "string")) {
+    throw new PersistlyConfigurationError("Profile response profileSessionToken must be a string when present.");
+  }
+
+  return {
+    profileSaveId,
+    ...(profileSessionToken === undefined ? {} : { profileSessionToken }),
+    profile,
+    ...(character === undefined ? {} : { character }),
+    ...(syncPolicy === undefined ? {} : { syncPolicy }),
+  };
+}
+
+function requireCreatedProfileEnvelope(envelope: ProfileEnvelope): CreatedProfileEnvelope {
+  if (typeof envelope.profileSessionToken !== "string" || envelope.profileSessionToken.trim() === "") {
+    throw new PersistlyConfigurationError("Create profile response must include a non-empty profileSessionToken.");
+  }
+  if (envelope.character === undefined) {
+    throw new PersistlyConfigurationError("Create profile response must include the first character save.");
+  }
+  if (envelope.syncPolicy === undefined) {
+    throw new PersistlyConfigurationError("Create profile response must include syncPolicy.");
+  }
+
+  return {
+    ...envelope,
+    profileSessionToken: envelope.profileSessionToken,
+    character: envelope.character,
+    syncPolicy: envelope.syncPolicy,
+  };
+}
+
+function requireProfileCharacterEnvelope(envelope: ProfileEnvelope): ProfileCharacterEnvelope {
+  if (envelope.character === undefined) {
+    throw new PersistlyConfigurationError("Create profile character response must include the character save.");
+  }
+
+  return {
+    ...envelope,
+    character: envelope.character,
+  };
+}
+
+function parseRuntimeConfig(value: unknown): RuntimeConfig {
+  const record = parseObject(value, "Runtime config response");
+  return {
+    syncPolicy: parseSyncPolicy(record.syncPolicy),
+  };
+}
+
+function parseSyncPolicy(value: unknown): SyncPolicy {
+  const record = parseObject(value, "Sync policy");
+  const minRemoteSyncIntervalSeconds = parsePositiveInteger(record.minRemoteSyncIntervalSeconds, "syncPolicy.minRemoteSyncIntervalSeconds");
+  const forceSyncCooldownSeconds = parsePositiveInteger(record.forceSyncCooldownSeconds, "syncPolicy.forceSyncCooldownSeconds");
+  const maxQueuedLocalSnapshots = parsePositiveInteger(record.maxQueuedLocalSnapshots, "syncPolicy.maxQueuedLocalSnapshots");
+
+  if (typeof record.syncOnAppBackground !== "boolean") {
+    throw new PersistlyConfigurationError("syncPolicy.syncOnAppBackground must be a boolean.");
+  }
+  if (typeof record.syncOnAppForeground !== "boolean") {
+    throw new PersistlyConfigurationError("syncPolicy.syncOnAppForeground must be a boolean.");
+  }
+  if (typeof record.syncOnReconnect !== "boolean") {
+    throw new PersistlyConfigurationError("syncPolicy.syncOnReconnect must be a boolean.");
+  }
+
+  return {
+    minRemoteSyncIntervalSeconds,
+    forceSyncCooldownSeconds,
+    syncOnAppBackground: record.syncOnAppBackground,
+    syncOnAppForeground: record.syncOnAppForeground,
+    syncOnReconnect: record.syncOnReconnect,
+    maxQueuedLocalSnapshots,
+  };
+}
+
+function parsePositiveInteger(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
+    throw new PersistlyConfigurationError(`${label} must be a positive integer.`);
+  }
+  return value;
 }
 
 function parseAcceptedSyncResult(value: unknown): SyncAcceptedResult {
@@ -315,6 +603,7 @@ function isPersistlyErrorCode(value: unknown): value is PersistlyErrorCode {
   return (
     value === "invalid_request" ||
     value === "unauthorized" ||
+    value === "forbidden" ||
     value === "not_found" ||
     value === "conflict" ||
     value === "rate_limited" ||
