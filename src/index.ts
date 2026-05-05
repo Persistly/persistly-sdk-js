@@ -3,5 +3,6 @@ export * from "./cache.js";
 export * from "./client.js";
 export * from "./errors.js";
 export * from "./file-cache.js";
+export * from "./game-saves.js";
 export * from "./local-storage-cache.js";
 export * from "./profile.js";
