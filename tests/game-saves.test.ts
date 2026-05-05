@@ -53,3 +53,26 @@ test("configured facade stores local slot state", async () => {
   assert.equal(slot?.slotKey, "autosave");
   assert.deepEqual(slot?.dirtyState, { coins: 42 });
 });
+
+test("saveSlot writes local state and returns LocalSaved constant value", async () => {
+  const persistly = await PersistlyGameSaves.start({
+    runtimeKey: "ps_test_example",
+    storage: "memory",
+  });
+
+  const result = await persistly.saveSlot("autosave", { coins: 42 });
+
+  assert.equal(result.status, PersistlySlotStatus.LocalSaved);
+  assert.equal(result.slotKey, "autosave");
+});
+
+test("conflict helper methods are present on facade", async () => {
+  const persistly = await PersistlyGameSaves.start({
+    runtimeKey: "ps_test_example",
+    storage: "memory",
+  });
+
+  assert.equal(typeof persistly.acceptCloudVersion, "function");
+  assert.equal(typeof persistly.overwriteCloudVersion, "function");
+  assert.equal(typeof persistly.keepLocalForLater, "function");
+});

@@ -14,6 +14,31 @@ npm install @persistly/sdk-js
 
 ```ts
 import {
+  PersistlyGameSaves,
+  PersistlySlotStatus,
+} from "@persistly/sdk-js";
+
+await PersistlyGameSaves.configure({
+  runtimeKey: "ps_test_replace_me",
+  storage: "localStorage",
+});
+
+const result = await PersistlyGameSaves.shared.saveSlot("autosave", {
+  level: 5,
+  coins: 1200,
+});
+
+if (result.status === PersistlySlotStatus.LocalSaved) {
+  console.log("Saved locally.");
+}
+```
+
+## Advanced Runtime Client
+
+Use `PersistlyClient` directly when your game needs explicit profile/session handling, custom cache wiring, or direct access to the public runtime API.
+
+```ts
+import {
   LocalStorageSaveCache,
   PersistlyClient,
   PersistlySyncStatus,
@@ -44,7 +69,7 @@ const created = await client.createProfile({
 localStorage.setItem("my-game:profileSaveId", created.profileSaveId);
 localStorage.setItem("my-game:profileSessionToken", created.profileSessionToken);
 
-const result = await client.syncProfileCharacter({
+const syncResult = await client.syncProfileCharacter({
   profileSaveId: created.profileSaveId,
   profileSessionToken: created.profileSessionToken,
   characterSaveId: created.character.saveId,
@@ -56,8 +81,8 @@ const result = await client.syncProfileCharacter({
   },
 });
 
-if (result.status === PersistlySyncStatus.Conflict) {
-  console.error("Conflict. Canonical server save:", result.save);
+if (syncResult.status === PersistlySyncStatus.Conflict) {
+  console.error("Conflict. Canonical server save:", syncResult.save);
 }
 ```
 
@@ -169,7 +194,9 @@ await autosave.recordLocalChange({
 ## Examples
 
 - `examples/basic.ts` creates a profile with one character and syncs that character.
+- `examples/browser-basic.ts` shows the browser-first `PersistlyGameSaves` facade.
 - `examples/conflict.ts` shows a profile-scoped character conflict.
+- `examples/vite-basic.ts` shows Vite environment variable configuration.
 
 Both examples use an in-memory cache so they can be read as small game-flow references. Browser games should persist `profileSaveId`, `profileSessionToken`, and the active character `saveId` in localStorage, IndexedDB, or their own save-file layer.
 

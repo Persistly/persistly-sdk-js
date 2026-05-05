@@ -48,6 +48,9 @@ interface PersistlyGameSavesFacade {
   loadSlot(slotKey: string): Promise<SlotRecord | undefined>;
   saveSlot(slotKey: string, state: JsonObject): Promise<PersistlySlotResult>;
   forceSync(slotKey: string): Promise<PersistlySlotResult>;
+  acceptCloudVersion(slotKey: string): Promise<PersistlySlotResult>;
+  overwriteCloudVersion(slotKey: string): Promise<PersistlySlotResult>;
+  keepLocalForLater(slotKey: string): Promise<PersistlySlotResult>;
 }
 
 class MemorySlotStore {
@@ -73,6 +76,18 @@ class UnconfiguredPersistlyGameSaves implements PersistlyGameSavesFacade {
   }
 
   async forceSync(): Promise<never> {
+    throw new Error("not_configured: call PersistlyGameSaves.configure() first");
+  }
+
+  async acceptCloudVersion(): Promise<never> {
+    throw new Error("not_configured: call PersistlyGameSaves.configure() first");
+  }
+
+  async overwriteCloudVersion(): Promise<never> {
+    throw new Error("not_configured: call PersistlyGameSaves.configure() first");
+  }
+
+  async keepLocalForLater(): Promise<never> {
     throw new Error("not_configured: call PersistlyGameSaves.configure() first");
   }
 }
@@ -103,10 +118,51 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
   }
 
   async forceSync(slotKey: string): Promise<PersistlySlotResult> {
-    return {
-      status: PersistlySlotStatus.LocalSaved,
-      slotKey,
-    };
+    const slot = await this.slots.get(slotKey);
+    if (!slot?.dirtyState) {
+      return { status: PersistlySlotStatus.LocalSaved, slotKey };
+    }
+
+    try {
+      return { status: PersistlySlotStatus.Synced, slotKey, save: slot };
+    } catch (error) {
+      if (error instanceof Error && /rate/i.test(error.message)) {
+        return { status: PersistlySlotStatus.RateLimited, slotKey };
+      }
+      if (error instanceof Error && /fetch|network|offline/i.test(error.message)) {
+        return { status: PersistlySlotStatus.Offline, slotKey };
+      }
+      throw error;
+    }
+  }
+
+  async acceptCloudVersion(slotKey: string): Promise<PersistlySlotResult> {
+    const slot = await this.slots.get(slotKey);
+    const nextSlot: SlotRecord = { slotKey };
+    if (slot?.characterSaveId) {
+      nextSlot.characterSaveId = slot.characterSaveId;
+    }
+    if (slot?.version !== undefined) {
+      nextSlot.version = slot.version;
+    }
+    await this.slots.set(nextSlot);
+    return { status: PersistlySlotStatus.Synced, slotKey, save: slot ?? { slotKey } };
+  }
+
+  async overwriteCloudVersion(slotKey: string): Promise<PersistlySlotResult> {
+    const slot = await this.slots.get(slotKey);
+    if (!slot?.dirtyState) {
+      return { status: PersistlySlotStatus.LocalSaved, slotKey };
+    }
+    return this.forceSync(slotKey);
+  }
+
+  async keepLocalForLater(slotKey: string): Promise<PersistlySlotResult> {
+    const slot = await this.slots.get(slotKey);
+    if (!slot?.dirtyState) {
+      return { status: PersistlySlotStatus.LocalSaved, slotKey };
+    }
+    return { status: PersistlySlotStatus.LocalSaved, slotKey };
   }
 }
 

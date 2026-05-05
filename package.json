@@ -46,6 +46,10 @@
       "types": "./dist/file-cache.d.ts",
       "default": "./dist/file-cache.js"
     },
+    "./game-saves": {
+      "types": "./dist/game-saves.d.ts",
+      "default": "./dist/game-saves.js"
+    },
     "./local-storage-cache": {
       "types": "./dist/local-storage-cache.d.ts",
       "default": "./dist/local-storage-cache.js"
