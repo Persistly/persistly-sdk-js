@@ -66,6 +66,53 @@ test("saveSlot writes local state and returns LocalSaved constant value", async 
   assert.equal(result.slotKey, "autosave");
 });
 
+test("forceSync returns Synced for dirty local state", async () => {
+  const persistly = await PersistlyGameSaves.start({
+    runtimeKey: "ps_test_example",
+    storage: "memory",
+  });
+
+  await persistly.saveSlot("autosave", { coins: 42 });
+  const result = await persistly.forceSync("autosave");
+
+  assert.equal(result.status, PersistlySlotStatus.Synced);
+  assert.equal(result.slotKey, "autosave");
+});
+
+test("forceSync maps rate errors to RateLimited for dirty local state", async () => {
+  const persistly = await PersistlyGameSaves.start({
+    runtimeKey: "ps_test_example",
+    storage: "memory",
+    syncSlot: async () => {
+      throw new Error("rate limited");
+    },
+  });
+
+  await persistly.saveSlot("autosave", { coins: 42 });
+  const result = await persistly.forceSync("autosave");
+
+  assert.equal(result.status, PersistlySlotStatus.RateLimited);
+  assert.equal(result.slotKey, "autosave");
+});
+
+test("forceSync maps network and offline errors to Offline for dirty local state", async () => {
+  for (const message of ["network unavailable", "offline"]) {
+    const persistly = await PersistlyGameSaves.start({
+      runtimeKey: "ps_test_example",
+      storage: "memory",
+      syncSlot: async () => {
+        throw new Error(message);
+      },
+    });
+
+    await persistly.saveSlot("autosave", { coins: 42 });
+    const result = await persistly.forceSync("autosave");
+
+    assert.equal(result.status, PersistlySlotStatus.Offline);
+    assert.equal(result.slotKey, "autosave");
+  }
+});
+
 test("conflict helper methods are present on facade", async () => {
   const persistly = await PersistlyGameSaves.start({
     runtimeKey: "ps_test_example",

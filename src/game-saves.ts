@@ -35,6 +35,8 @@ export interface PersistlyGameSavesConfig {
   playerRef?: string;
   storage?: PersistlyGameSavesStorage;
   syncIntervalSeconds?: number;
+  /** @internal Test hook until remote profile sync is wired. */
+  syncSlot?: (slotKey: string, slot: SlotRecord) => Promise<unknown>;
 }
 
 interface SlotRecord {
@@ -97,11 +99,13 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
   private readonly playerRef: string | undefined;
   private readonly syncIntervalSeconds: number | undefined;
   private readonly slots = new MemorySlotStore();
+  private readonly syncSlot: (slotKey: string, slot: SlotRecord) => Promise<unknown>;
 
   constructor(config: PersistlyGameSavesConfig) {
     this.client = new PersistlyClient({ runtimeKey: config.runtimeKey });
     this.playerRef = config.playerRef;
     this.syncIntervalSeconds = config.syncIntervalSeconds;
+    this.syncSlot = config.syncSlot ?? (async (_slotKey, slot) => slot);
   }
 
   async loadSlot(slotKey: string): Promise<SlotRecord | undefined> {
@@ -124,7 +128,8 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     }
 
     try {
-      return { status: PersistlySlotStatus.Synced, slotKey, save: slot };
+      const save = await this.syncSlot(slotKey, slot);
+      return { status: PersistlySlotStatus.Synced, slotKey, save };
     } catch (error) {
       if (error instanceof Error && /rate/i.test(error.message)) {
         return { status: PersistlySlotStatus.RateLimited, slotKey };
