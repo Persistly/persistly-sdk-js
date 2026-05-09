@@ -19,7 +19,7 @@ test("validate-contract rejects unexpected extra files in the pinned bundle", as
       path.join(
         sandboxRoot,
         "contracts",
-        "persistly-contract-v0.2.0",
+        "persistly-contract-v0.3.0",
         "examples",
         "unexpected.json",
       ),
@@ -46,7 +46,7 @@ test("validate-contract asserts the pinned manifest metadata", async () => {
     const manifestPath = path.join(
       sandboxRoot,
       "contracts",
-      "persistly-contract-v0.2.0",
+      "persistly-contract-v0.3.0",
       "manifest.json",
     );
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;

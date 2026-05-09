@@ -1,6 +1,6 @@
 import { PersistlyPayloadTooLargeError } from "./errors.js";
 import type { JsonObject } from "./schema.js";
-import runtimeLimitsJson from "../contracts/persistly-contract-v0.2.0/limits/runtime-limits.json" with { type: "json" };
+import runtimeLimitsJson from "../contracts/persistly-contract-v0.3.0/limits/runtime-limits.json" with { type: "json" };
 
 interface RuntimeLimits {
   metadataMaxBytes: number;

@@ -1,4 +1,4 @@
-import { MemorySaveCache, PersistlyClient, PersistlySyncStatus } from "@persistly/sdk-js";
+import { MemorySaveCache, PersistlyClient, PersistlySyncStatus } from "@persistly/sdk";
 
 const runtimeKey = process.env.PERSISTLY_RUNTIME_KEY;
 
@@ -14,14 +14,20 @@ const client = new PersistlyClient({
 const created = await client.createProfile({
   playerRef: "example-player",
   accountData: { diamonds: 0, tutorialComplete: false },
-  characterMetadata: { characterName: "Ayla", slot: "main" },
-  characterState: { gold: 100, level: 1 },
+  character: {
+    metadata: { _persistly: { slotKey: "main" }, characterName: "Ayla" },
+    state: { gold: 100, level: 1 },
+  },
 });
 
 // Store these in localStorage, IndexedDB, a save file, or your own backend.
 const profileSaveId = created.profileSaveId;
 const profileSessionToken = created.profileSessionToken;
-const characterSaveId = created.character.saveId;
+const characterSaveId = created.character?.saveId;
+
+if (!created.character || !characterSaveId) {
+  throw new Error("Expected example profile creation to include an initial character.");
+}
 
 const updated = await client.syncProfileCharacter({
   profileSaveId,

@@ -13,7 +13,7 @@ info:
   license:
     name: Proprietary
     url: https://persistly.app/terms
-  version: 0.2.0
+  version: 0.3.0
 servers:
   - url: https://api.persistly.app
     description: Public production runtime API
@@ -128,8 +128,8 @@ paths:
     post:
       operationId: createProfile
       tags: [Profiles]
-      summary: Create profile and first character
-      description: Create a profile save, first character save, and one profile session token. externalProfileRef is stored as a non-authoritative reference only and is not publicly resolvable.
+      summary: Create profile
+      description: Create a profile save and one profile session token. A first character can be created in the same request by sending the optional nested character object. externalProfileRef is stored as a non-authoritative reference only and is not publicly resolvable.
       security:
         - RuntimeKey: []
       requestBody:
@@ -181,12 +181,54 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/ServerError'
+  /api/v1/profiles/{profileSaveId}/account-data/sync:
+    post:
+      operationId: syncProfileAccountData
+      tags: [Profiles]
+      summary: Sync profile account data
+      description: Replace or shallow-patch profile account-wide gameplay data while preserving server-owned schema and characterSlots. metadata may be replaced or cleared with null.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/ProfileSaveId'
+        - $ref: '#/components/parameters/ProfileSession'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncProfileAccountDataRequest'
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncAcceptedResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncConflictResponse'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
   /api/v1/profiles/{profileSaveId}/characters:
     post:
       operationId: createProfileCharacter
       tags: [Profiles]
       summary: Add character
-      description: Create a character save under an existing profile and append its saveId to the profile state.
+      description: Create a character save under an existing profile and append its saveId to the profile state. metadata._persistly.slotKey is required and must be unique among active character slots for the profile.
       security:
         - RuntimeKey: []
       parameters:
@@ -211,6 +253,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/SlotAlreadyExists'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
         '429':
@@ -270,11 +314,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/SyncAcceptedResponse'
         '409':
-          description: Conflict
+          description: Conflict or archived character
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SyncConflictResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/SyncConflictResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                archived:
+                  summary: Archived character cannot be synced
+                  value:
+                    error:
+                      code: character_archived
+                      message: Archived characters cannot be synced.
+                      details:
+                        characterSaveId: sv_character
         '400':
           $ref: '#/components/responses/InvalidRequest'
         '401':
@@ -283,6 +338,33 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/profiles/{profileSaveId}/characters/{characterSaveId}/archive:
+    post:
+      operationId: archiveProfileCharacter
+      tags: [Profiles]
+      summary: Archive profile character
+      description: Archive a character slot under a profile. Archived characters remain loadable for recovery/history, cannot be synced through normal character sync, and free the slot key so a replacement character can be created.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/ProfileSaveId'
+        - $ref: '#/components/parameters/CharacterSaveId'
+        - $ref: '#/components/parameters/ProfileSession'
+      responses:
+        '200':
+          description: Character archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileEnvelopeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -576,9 +658,40 @@ components:
       properties:
         syncPolicy:
           $ref: '#/components/schemas/SyncPolicy'
+    PersistlyProfileState:
+      type: object
+      required: [schema, accountData, characterSlots]
+      description: Shape stored in profile.state for profile-backed game saves.
+      properties:
+        schema:
+          type: string
+          const: persistly.profile.v1
+        accountData:
+          type: object
+          description: Developer-controlled account-wide gameplay state.
+          additionalProperties: true
+        characterSlots:
+          type: array
+          description: Server-maintained character slot references. Profile account-data sync must preserve this list. Archived slots remain listed for history/recovery, and active slot uniqueness ignores archived entries.
+          items:
+            type: object
+            required: [slotKey, characterSaveId, metadata]
+            properties:
+              slotKey:
+                type: string
+                pattern: ^[A-Za-z0-9_.-]{1,64}$
+              characterSaveId:
+                type: string
+              metadata:
+                type: object
+                additionalProperties: true
+              archived:
+                type: boolean
+              archivedAt:
+                type: string
+                format: date-time
     CreateProfileRequest:
       type: object
-      required: [characterMetadata, characterState]
       properties:
         playerRef:
           type: string
@@ -592,26 +705,75 @@ components:
         accountData:
           type: object
           x-max-bytes: 262144
+          description: Account-wide gameplay state stored in profile.state.accountData.
           additionalProperties: true
-        characterMetadata:
-          type: object
+        character:
+          $ref: '#/components/schemas/CreateProfileInitialCharacter'
+    CreateProfileInitialCharacter:
+      type: object
+      required: [metadata, state]
+      description: Optional first character slot to create with the profile.
+      properties:
+        metadata:
+          $ref: '#/components/schemas/ProfileCharacterMetadata'
           x-max-bytes: 16384
-          additionalProperties: true
-        characterState:
+          description: Character slot display/index metadata. metadata._persistly.slotKey identifies the named slot and is required when character is present.
+        state:
           type: object
           x-max-bytes: 262144
+          description: Character gameplay state.
           additionalProperties: true
     CreateProfileCharacterRequest:
       type: object
       required: [metadata, state]
       properties:
         metadata:
-          type: object
+          $ref: '#/components/schemas/ProfileCharacterMetadata'
           x-max-bytes: 16384
-          additionalProperties: true
+          description: Character slot display/index metadata. metadata._persistly.slotKey identifies the named slot.
         state:
           type: object
           x-max-bytes: 262144
+          additionalProperties: true
+    ProfileCharacterMetadata:
+      type: object
+      required: [_persistly]
+      additionalProperties: true
+      properties:
+        _persistly:
+          type: object
+          required: [slotKey]
+          additionalProperties: false
+          properties:
+            slotKey:
+              type: string
+              pattern: ^[A-Za-z0-9_.-]{1,64}$
+              description: Developer-facing character slot identifier. It must be unique among active characters under the profile.
+    SyncProfileAccountDataRequest:
+      type: object
+      required: [baseVersion]
+      description: Exactly one of accountData or accountDataPatch may be present. At least one of accountData, accountDataPatch, or metadata must be present.
+      properties:
+        baseVersion:
+          type: integer
+          minimum: 1
+          description: Last canonical profile.version accepted by the client.
+        accountData:
+          type: object
+          x-max-bytes: 262144
+          description: Full replacement for profile.state.accountData.
+          additionalProperties: true
+        accountDataPatch:
+          type: object
+          x-max-bytes: 262144
+          description: Shallow top-level patch for profile.state.accountData. Null values remove top-level keys.
+          additionalProperties: true
+        metadata:
+          type:
+            - object
+            - 'null'
+          x-max-bytes: 16384
+          description: Full replacement for profile metadata. Send null to clear metadata.
           additionalProperties: true
     ProfileEnvelopeResponse:
       type: object
@@ -624,6 +786,7 @@ components:
           description: Returned only on profile creation. Store locally; it authorizes access only to this profile and its characters.
         profile:
           $ref: '#/components/schemas/Save'
+          description: Profile save. Its state follows PersistlyProfileState.
         character:
           $ref: '#/components/schemas/Save'
         syncPolicy:
@@ -681,7 +844,7 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, rate_limited, payload_too_large, server_error]
+              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, character_archived, rate_limited, payload_too_large, server_error]
             message:
               type: string
             details:
@@ -740,6 +903,21 @@ components:
                 error:
                   code: forbidden
                   message: Profile session cannot access this resource.
+    SlotAlreadyExists:
+      description: Character slot already exists
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Duplicate active character slot
+              value:
+                error:
+                  code: slot_already_exists
+                  message: An active character already exists for this slot key.
+                  details:
+                    slotKey: autosave
     PayloadTooLarge:
       description: Payload too large
       content:

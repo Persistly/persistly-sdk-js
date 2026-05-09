@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0
+
+- Renames the npm package to `@persistly/sdk`.
+- Pins `persistly-contract-v0.3.0` and adds profile-only creation, optional initial characters, account-data sync, character archive, `characterSlots`, and typed slot/archive errors.
+- Reworks `PersistlyGameSaves` as a profile-backed, local-first facade with exported game-save status and target constants.
+
 ## 0.9.1
 
 - Renames the optional public save reference field to `playerRef`.

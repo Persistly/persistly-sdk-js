@@ -7,16 +7,16 @@ The JavaScript SDK is the reference Persistly client for web games, wrappers, la
 ## Install
 
 ```bash
-npm install @persistly/sdk-js
+npm install @persistly/sdk
 ```
 
 ## Quickstart
 
 ```ts
 import {
+  PersistlyGameSaveStatus,
   PersistlyGameSaves,
-  PersistlySlotStatus,
-} from "@persistly/sdk-js";
+} from "@persistly/sdk";
 
 await PersistlyGameSaves.configure({
   runtimeKey: "ps_test_replace_me",
@@ -28,7 +28,7 @@ const result = await PersistlyGameSaves.shared.saveSlot("autosave", {
   coins: 1200,
 });
 
-if (result.status === PersistlySlotStatus.LocalSaved) {
+if (result.status === PersistlyGameSaveStatus.LocalSaved) {
   console.log("Saved locally.");
 }
 ```
@@ -42,7 +42,7 @@ import {
   LocalStorageSaveCache,
   PersistlyClient,
   PersistlySyncStatus,
-} from "@persistly/sdk-js";
+} from "@persistly/sdk";
 
 const runtimeKey = process.env.PERSISTLY_RUNTIME_KEY;
 
@@ -59,12 +59,18 @@ const created = await client.createProfile({
   playerRef: "player-184",
   profileMetadata: { displayName: "Ayla" },
   accountData: { diamonds: 1200 },
-  characterMetadata: { characterName: "Ayla", slot: "mage" },
-  characterState: {
-    checkpoint: "vault",
-    coins: 418,
+  character: {
+    metadata: { _persistly: { slotKey: "mage" }, characterName: "Ayla" },
+    state: {
+      checkpoint: "vault",
+      coins: 418,
+    },
   },
 });
+
+if (!created.character) {
+  throw new Error("Expected profile creation to include an initial character.");
+}
 
 localStorage.setItem("my-game:profileSaveId", created.profileSaveId);
 localStorage.setItem("my-game:profileSessionToken", created.profileSessionToken);
@@ -94,9 +100,11 @@ The SDK uses the Persistly production runtime API by default. In normal game cod
 
 Supported public runtime operations:
 
-- create profile with first character and profile session
+- create profile-only or create profile with an optional first character and profile session
 - load profile by `profileSaveId` plus `profileSessionToken`
 - create/load/sync profile-owned character saves
+- sync profile account data
+- archive profile-owned character saves
 - read runtime sync policy
 - lower-level raw create/load/sync by `saveId` for advanced direct-save integrations
 
@@ -111,7 +119,7 @@ Unsupported public runtime operations:
 
 ## Contract Bundle
 
-This repo pins `persistly-contract-v0.2.0` under `contracts/`.
+This repo pins `persistly-contract-v0.3.0` under `contracts/`.
 
 The pinned bundle is treated as authoritative for request/response semantics and runtime payload limits.
 
@@ -120,14 +128,14 @@ The pinned bundle is treated as authoritative for request/response semantics and
 - `runtimeKey` must be supplied by the caller
 - the client always targets `https://api.persistly.app`
 - `loadSave`, `syncSave`, and `getLocal` require a non-empty `saveId`
-- `loadProfile`, `createProfileCharacter`, `loadProfileCharacter`, and `syncProfileCharacter` require `profileSaveId` and `profileSessionToken`
+- `loadProfile`, `syncProfileAccountData`, `createProfileCharacter`, `loadProfileCharacter`, `syncProfileCharacter`, and `archiveProfileCharacter` require `profileSaveId` and `profileSessionToken`
 - `syncSave` can infer `baseVersion` from the configured cache when a canonical save is already loaded locally
 - `syncProfileCharacter` can infer `baseVersion` from the configured cache when a canonical character save is already loaded locally
 - `PersistlySyncStatus.Accepted` and `PersistlySyncStatus.Conflict` are the exported status constants for sync results
 
 ## Payload Limits
 
-- The SDK performs conservative client-side size checks for `metadata` and `state` using the pinned bundle limits in `contracts/persistly-contract-v0.2.0/limits/runtime-limits.json`
+- The SDK performs conservative client-side size checks for `metadata` and `state` using the pinned bundle limits in `contracts/persistly-contract-v0.3.0/limits/runtime-limits.json`
 - These checks are a reference guard, not a replacement for server validation; the runtime API remains authoritative
 - When a payload exceeds a pinned limit, the SDK throws `PersistlyPayloadTooLargeError` with the same `payload_too_large` code and `{ field, maxBytes }` details shape used by the runtime API
 
@@ -147,7 +155,7 @@ import {
   LocalStorageSaveCache,
   PersistlyAutosaveManager,
   PersistlyClient,
-} from "@persistly/sdk-js";
+} from "@persistly/sdk";
 
 const client = new PersistlyClient({
   runtimeKey: process.env.NEXT_PUBLIC_PERSISTLY_RUNTIME_KEY,
@@ -162,9 +170,15 @@ if (!profileSaveId || !profileSessionToken || !characterSaveId) {
   const created = await client.createProfile({
     playerRef: "player-184",
     accountData: { diamonds: 0 },
-    characterMetadata: { slot: "main" },
-    characterState: { checkpoint: "intro", coins: 0 },
+    character: {
+      metadata: { _persistly: { slotKey: "main" } },
+      state: { checkpoint: "intro", coins: 0 },
+    },
   });
+
+  if (!created.character) {
+    throw new Error("Expected profile creation to include an initial character.");
+  }
 
   profileSaveId = created.profileSaveId;
   profileSessionToken = created.profileSessionToken;
@@ -186,7 +200,7 @@ const autosave = new PersistlyAutosaveManager({
 });
 
 await autosave.recordLocalChange({
-  metadata: { slot: "main" },
+  metadata: { _persistly: { slotKey: "main" } },
   state: { checkpoint: "forest", coins: 25 },
 });
 ```
@@ -209,7 +223,7 @@ import {
   LocalStorageSaveCache,
   PersistlyClient,
   isPersistlyProfileState,
-} from "@persistly/sdk-js";
+} from "@persistly/sdk";
 
 const client = new PersistlyClient({
   runtimeKey: process.env.NEXT_PUBLIC_PERSISTLY_RUNTIME_KEY!,
@@ -224,8 +238,10 @@ const created = await client.createProfile({
   },
   profileMetadata: { displayName: "Ayla" },
   accountData: { diamonds: 1200 },
-  characterMetadata: { characterName: "Ayla", slot: "mage" },
-  characterState: { checkpoint: "vault", level: 5 },
+  character: {
+    metadata: { _persistly: { slotKey: "mage" }, characterName: "Ayla" },
+    state: { checkpoint: "vault", level: 5 },
+  },
 });
 
 localStorage.setItem("my-game:profileSaveId", created.profileSaveId);
@@ -238,11 +254,11 @@ const profile = await client.loadProfile({
 
 if (isPersistlyProfileState(profile.state)) {
   const characterSaves = await Promise.all(
-    profile.state.characters.map((character) =>
+    profile.state.characterSlots.map((character) =>
       client.loadProfileCharacter({
         profileSaveId: created.profileSaveId,
         profileSessionToken: created.profileSessionToken,
-        characterSaveId: character.saveId,
+        characterSaveId: character.characterSaveId,
       }),
     ),
   );

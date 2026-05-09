@@ -1,6 +1,6 @@
 {
-  "name": "@persistly/sdk-js",
-  "version": "0.9.1",
+  "name": "@persistly/sdk",
+  "version": "0.10.0",
   "description": "JavaScript SDK for Persistly cloud save sync.",
   "license": "Apache-2.0",
   "type": "module",

@@ -5,8 +5,11 @@ import {
   DEFAULT_PERSISTLY_API_BASE_URL,
   MemorySaveCache,
   PersistlyClient,
+  PersistlyConfigurationError,
   PersistlyForbiddenError,
+  PersistlyCharacterArchivedError,
   PersistlyPayloadTooLargeError,
+  PersistlySlotAlreadyExistsError,
   PersistlyServerError,
   PersistlySyncStatus,
   type SaveEnvelope,
@@ -501,7 +504,16 @@ test("createProfile posts profile payload, session-caches saves, and returns ses
       state: {
         schema: "persistly.profile.v1",
         accountData: { diamonds: 1200 },
-        characters: [{ saveId: "sv_character", metadata: { characterName: "Ayla" } }],
+        characterSlots: [
+          {
+            slotKey: "autosave",
+            characterSaveId: "sv_character",
+            metadata: {
+              _persistly: { slotKey: "autosave" },
+              characterName: "Ayla",
+            },
+          },
+        ],
       },
       version: 1,
       createdAt: "2026-04-09T10:00:00Z",
@@ -510,7 +522,7 @@ test("createProfile posts profile payload, session-caches saves, and returns ses
     character: {
       saveId: "sv_character",
       playerRef: "player-184",
-      metadata: { characterName: "Ayla" },
+      metadata: { _persistly: { slotKey: "autosave" }, characterName: "Ayla" },
       state: { level: 1 },
       version: 1,
       createdAt: "2026-04-09T10:00:00Z",
@@ -532,8 +544,10 @@ test("createProfile posts profile payload, session-caches saves, and returns ses
     externalProfileRef: { provider: "auth0", subject: "auth0|abc123" },
     profileMetadata: { profileLabel: "Main" },
     accountData: { diamonds: 1200 },
-    characterMetadata: { characterName: "Ayla" },
-    characterState: { level: 1 },
+    character: {
+      metadata: { _persistly: { slotKey: "autosave" }, characterName: "Ayla" },
+      state: { level: 1 },
+    },
   });
 
   assert.equal(result.profileSessionToken, "pst_session");
@@ -546,9 +560,278 @@ test("createProfile posts profile payload, session-caches saves, and returns ses
     externalProfileRef: { provider: "auth0", subject: "auth0|abc123" },
     profileMetadata: { profileLabel: "Main" },
     accountData: { diamonds: 1200 },
-    characterMetadata: { characterName: "Ayla" },
-    characterState: { level: 1 },
+    character: {
+      metadata: { _persistly: { slotKey: "autosave" }, characterName: "Ayla" },
+      state: { level: 1 },
+    },
   });
+});
+
+test("createProfile supports profile-only creation without first character", async () => {
+  const cache = new MemorySaveCache();
+  const expected: ProfileEnvelope = {
+    profileSaveId: "sv_profile_only",
+    profileSessionToken: "pst_session",
+    syncPolicy: {
+      minRemoteSyncIntervalSeconds: 60,
+      forceSyncCooldownSeconds: 10,
+      syncOnAppBackground: true,
+      syncOnAppForeground: true,
+      syncOnReconnect: true,
+      maxQueuedLocalSnapshots: 25,
+    },
+    profile: {
+      saveId: "sv_profile_only",
+      playerRef: "player-184",
+      metadata: {},
+      state: {
+        schema: "persistly.profile.v1",
+        accountData: {},
+        characterSlots: [],
+      },
+      version: 1,
+      createdAt: "2026-04-09T10:00:00Z",
+      updatedAt: "2026-04-09T10:00:00Z",
+    },
+  };
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    cache,
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return createJsonResponse(201, expected);
+    },
+  });
+
+  const result = await client.createProfile({
+    playerRef: "player-184",
+    accountData: {},
+  });
+
+  assert.equal(result.profileSaveId, "sv_profile_only");
+  assert.equal(result.character, undefined);
+  assert.deepEqual(await cache.get("sv_profile_only"), expected.profile);
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    playerRef: "player-184",
+    accountData: {},
+  });
+});
+
+test("syncProfileAccountData posts the account-data route and preserves profile result", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return createJsonResponse(200, {
+        status: "accepted",
+        save: {
+          saveId: "sv_profile",
+          playerRef: "player-184",
+          metadata: { profileLabel: "Main" },
+          state: {
+            schema: "persistly.profile.v1",
+            accountData: { diamonds: 1500 },
+            characterSlots: [],
+          },
+          version: 4,
+          createdAt: "2026-04-09T10:00:00Z",
+          updatedAt: "2026-04-09T10:05:00Z",
+        },
+      });
+    },
+  });
+
+  const result = await client.syncProfileAccountData({
+    profileSaveId: "sv_profile",
+    profileSessionToken: "pst_session",
+    baseVersion: 3,
+    accountDataPatch: { diamonds: 1500 },
+    metadata: null,
+  });
+
+  assert.equal(result.status, PersistlySyncStatus.Accepted);
+  assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/profiles/sv_profile/account-data/sync`);
+  assert.equal(new Headers(requests[0]?.init?.headers).get("x-persistly-profile-session"), "pst_session");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    baseVersion: 3,
+    accountDataPatch: { diamonds: 1500 },
+    metadata: null,
+  });
+});
+
+test("syncProfileAccountData rejects accountData with patch and empty sync body", async () => {
+  let fetchCalls = 0;
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async () => {
+      fetchCalls += 1;
+      return createJsonResponse(500, {});
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.syncProfileAccountData({
+        profileSaveId: "sv_profile",
+        profileSessionToken: "pst_session",
+        baseVersion: 3,
+        accountData: { diamonds: 1500 },
+        accountDataPatch: { coins: 20 },
+      }),
+    PersistlyConfigurationError,
+  );
+
+  await assert.rejects(
+    () =>
+      client.syncProfileAccountData({
+        profileSaveId: "sv_profile",
+        profileSessionToken: "pst_session",
+        baseVersion: 3,
+      }),
+    PersistlyConfigurationError,
+  );
+
+  assert.equal(fetchCalls, 0);
+});
+
+test("profile character inputs reject reserved persistly metadata beyond slotKey", async () => {
+  let fetchCalls = 0;
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async () => {
+      fetchCalls += 1;
+      return createJsonResponse(500, {});
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.createProfile({
+        character: {
+          metadata: { _persistly: { slotKey: "autosave", owner: "game" } },
+          state: { level: 1 },
+        },
+      }),
+    PersistlyConfigurationError,
+  );
+
+  await assert.rejects(
+    () =>
+      client.createProfileCharacter({
+        profileSaveId: "sv_profile",
+        profileSessionToken: "pst_session",
+        metadata: { _persistly: { slotKey: "autosave", owner: "game" } },
+        state: { level: 1 },
+      }),
+    PersistlyConfigurationError,
+  );
+
+  await assert.rejects(
+    () =>
+      client.syncProfileCharacter({
+        profileSaveId: "sv_profile",
+        profileSessionToken: "pst_session",
+        characterSaveId: "sv_character",
+        baseVersion: 1,
+        metadata: { _persistly: { slotKey: "autosave", owner: "game" } },
+        state: { level: 2 },
+      }),
+    PersistlyConfigurationError,
+  );
+
+  assert.equal(fetchCalls, 0);
+});
+
+test("archiveProfileCharacter posts archive route and caches returned profile", async () => {
+  const cache = new MemorySaveCache();
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    cache,
+    fetch: async () =>
+      createJsonResponse(200, {
+        profileSaveId: "sv_profile",
+        profile: {
+          saveId: "sv_profile",
+          playerRef: "player-184",
+          metadata: {},
+          state: {
+            schema: "persistly.profile.v1",
+            accountData: {},
+            characterSlots: [
+              {
+                slotKey: "autosave",
+                characterSaveId: "sv_character",
+                metadata: { _persistly: { slotKey: "autosave" } },
+                archived: true,
+                archivedAt: "2026-04-09T10:10:00Z",
+              },
+            ],
+          },
+          version: 3,
+          createdAt: "2026-04-09T10:00:00Z",
+          updatedAt: "2026-04-09T10:10:00Z",
+        },
+      }),
+  });
+
+  const envelope = await client.archiveProfileCharacter({
+    profileSaveId: "sv_profile",
+    profileSessionToken: "pst_session",
+    characterSaveId: "sv_character",
+  });
+
+  assert.equal(envelope.profile.state.characterSlots[0]?.archived, true);
+  assert.deepEqual(await cache.get("sv_profile"), envelope.profile);
+});
+
+test("duplicate slot and archived character errors are typed", async () => {
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async (input) => {
+      if (String(input).endsWith("/characters/sv_character/sync")) {
+        return createJsonResponse(409, {
+          error: {
+            code: "character_archived",
+            message: "Archived characters cannot be synced.",
+            details: { characterSaveId: "sv_character" },
+          },
+        });
+      }
+
+      return createJsonResponse(409, {
+        error: {
+          code: "slot_already_exists",
+          message: "An active character already exists for this slot key.",
+          details: { slotKey: "autosave" },
+        },
+      });
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      client.createProfileCharacter({
+        profileSaveId: "sv_profile",
+        profileSessionToken: "pst_session",
+        metadata: { _persistly: { slotKey: "autosave" } },
+        state: { level: 1 },
+      }),
+    (error: unknown) => error instanceof PersistlySlotAlreadyExistsError && error.code === "slot_already_exists",
+  );
+
+  await assert.rejects(
+    () =>
+      client.syncProfileCharacter({
+        profileSaveId: "sv_profile",
+        profileSessionToken: "pst_session",
+        characterSaveId: "sv_character",
+        baseVersion: 1,
+        state: { level: 2 },
+      }),
+    (error: unknown) => error instanceof PersistlyCharacterArchivedError && error.code === "character_archived",
+  );
 });
 
 test("profile session is sent when loading and syncing profile characters", async () => {

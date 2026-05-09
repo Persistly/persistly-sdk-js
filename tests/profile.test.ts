@@ -22,9 +22,10 @@ const characterSave: SaveSnapshot = {
 test("buildProfileState creates a valid profile state shape", () => {
   const state = buildProfileState({
     accountData: { diamonds: 1200 },
-    characters: [
+    characterSlots: [
       {
-        saveId: "sv_character",
+        slotKey: "autosave",
+        characterSaveId: "sv_character",
         metadata: { characterName: "Ayla" },
       },
     ],
@@ -33,25 +34,28 @@ test("buildProfileState creates a valid profile state shape", () => {
   assert.deepEqual(state, {
     schema: PersistlyProfileSchema,
     accountData: { diamonds: 1200 },
-    characters: [
+    characterSlots: [
       {
-        saveId: "sv_character",
+        slotKey: "autosave",
+        characterSaveId: "sv_character",
         metadata: { characterName: "Ayla" },
       },
     ],
   });
   assert.equal(isPersistlyProfileState(state), true);
-  assert.equal(isPersistlyProfileState({ schema: PersistlyProfileSchema, accountData: {}, characters: [{ metadata: {} }] }), false);
+  assert.equal(isPersistlyProfileState({ schema: PersistlyProfileSchema, accountData: {}, characters: [] }), false);
+  assert.equal(isPersistlyProfileState({ schema: PersistlyProfileSchema, accountData: {}, characterSlots: [{ metadata: {} }] }), false);
 });
 
 test("addCharacterToProfileState returns a cloned profile state with the character reference", () => {
   const initial = buildProfileState({ accountData: { diamonds: 50 } });
-  const updated = addCharacterToProfileState(initial, characterSave);
+  const updated = addCharacterToProfileState(initial, characterSave, "autosave");
 
-  assert.deepEqual(initial.characters, []);
-  assert.deepEqual(updated.characters, [
+  assert.deepEqual(initial.characterSlots, []);
+  assert.deepEqual(updated.characterSlots, [
     {
-      saveId: characterSave.saveId,
+      slotKey: "autosave",
+      characterSaveId: characterSave.saveId,
       metadata: characterSave.metadata,
     },
   ]);

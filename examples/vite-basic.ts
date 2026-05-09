@@ -1,4 +1,4 @@
-import { PersistlyGameSaves, PersistlySlotStatus } from "@persistly/sdk-js";
+import { PersistlyGameSaveStatus, PersistlyGameSaves } from "@persistly/sdk";
 
 await PersistlyGameSaves.configure({
   runtimeKey: import.meta.env.VITE_PERSISTLY_RUNTIME_KEY,
@@ -12,6 +12,6 @@ await PersistlyGameSaves.shared.saveSlot("autosave", {
 
 const result = await PersistlyGameSaves.shared.forceSync("autosave");
 
-if (result.status === PersistlySlotStatus.Synced) {
+if (result.status === PersistlyGameSaveStatus.Synced) {
   console.log("Cloud save synced.");
 }

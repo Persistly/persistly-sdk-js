@@ -3,45 +3,50 @@ import { parseObject, parseSaveSnapshot, type JsonObject, type SaveSnapshot } fr
 export const PersistlyProfileSchema = "persistly.profile.v1" as const;
 
 export interface PersistlyProfileCharacter extends JsonObject {
-  saveId: string;
+  slotKey: string;
+  characterSaveId: string;
   metadata: JsonObject;
+  archived?: boolean;
+  archivedAt?: string;
 }
 
 export interface PersistlyProfileState extends JsonObject {
   schema: typeof PersistlyProfileSchema;
   accountData: JsonObject;
-  characters: PersistlyProfileCharacter[];
+  characterSlots: PersistlyProfileCharacter[];
 }
 
 export interface BuildProfileStateInput {
   accountData?: JsonObject;
-  characters?: PersistlyProfileCharacter[];
+  characterSlots?: PersistlyProfileCharacter[];
 }
 
 export function buildProfileState(input: BuildProfileStateInput = {}): PersistlyProfileState {
   const accountData = input.accountData === undefined ? {} : parseObject(input.accountData, "profile.accountData");
-  const characters = input.characters === undefined ? [] : parseProfileCharacters(input.characters);
+  const characterSlots = input.characterSlots === undefined ? [] : parseProfileCharacters(input.characterSlots);
 
   return {
     schema: PersistlyProfileSchema,
     accountData: structuredClone(accountData),
-    characters: structuredClone(characters),
+    characterSlots: structuredClone(characterSlots),
   };
 }
 
 export function addCharacterToProfileState(
   profileState: PersistlyProfileState,
   characterSave: SaveSnapshot,
+  slotKey: string,
 ): PersistlyProfileState {
   const canonicalProfileState = parseProfileState(profileState);
   const canonicalCharacterSave = parseSaveSnapshot(characterSave);
 
   return buildProfileState({
     accountData: canonicalProfileState.accountData,
-    characters: [
-      ...canonicalProfileState.characters,
+    characterSlots: [
+      ...canonicalProfileState.characterSlots,
       {
-        saveId: canonicalCharacterSave.saveId,
+        slotKey: assertSlotKey(slotKey),
+        characterSaveId: canonicalCharacterSave.saveId,
         metadata: canonicalCharacterSave.metadata,
       },
     ],
@@ -65,30 +70,51 @@ function parseProfileState(value: unknown): PersistlyProfileState {
   }
 
   const accountData = parseObject(record.accountData, "profile.accountData");
-  const characters = parseProfileCharacters(record.characters);
+  const characterSlots = parseProfileCharacters(record.characterSlots);
 
   return {
     schema: PersistlyProfileSchema,
     accountData,
-    characters,
+    characterSlots,
   };
 }
 
 function parseProfileCharacters(value: unknown): PersistlyProfileCharacter[] {
   if (!Array.isArray(value)) {
-    throw new Error("profile.characters must be an array.");
+    throw new Error("profile.characterSlots must be an array.");
   }
 
   return value.map((item, index) => {
-    const record = parseObject(item, `profile.characters[${index}]`);
+    const record = parseObject(item, `profile.characterSlots[${index}]`);
 
-    if (typeof record.saveId !== "string" || record.saveId.trim().length === 0) {
-      throw new Error(`profile.characters[${index}].saveId must be a non-empty string.`);
+    if (typeof record.characterSaveId !== "string" || record.characterSaveId.trim().length === 0) {
+      throw new Error(`profile.characterSlots[${index}].characterSaveId must be a non-empty string.`);
+    }
+
+    const archived = record.archived;
+    const archivedAt = record.archivedAt;
+
+    if (!(archived === undefined || typeof archived === "boolean")) {
+      throw new Error(`profile.characterSlots[${index}].archived must be a boolean when present.`);
+    }
+    if (!(archivedAt === undefined || typeof archivedAt === "string")) {
+      throw new Error(`profile.characterSlots[${index}].archivedAt must be a string when present.`);
     }
 
     return {
-      saveId: record.saveId,
-      metadata: parseObject(record.metadata, `profile.characters[${index}].metadata`),
+      slotKey: assertSlotKey(record.slotKey, `profile.characterSlots[${index}].slotKey`),
+      characterSaveId: record.characterSaveId,
+      metadata: parseObject(record.metadata, `profile.characterSlots[${index}].metadata`),
+      ...(archived === undefined ? {} : { archived }),
+      ...(archivedAt === undefined ? {} : { archivedAt }),
     };
   });
+}
+
+function assertSlotKey(value: unknown, label = "slotKey"): string {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_.-]{1,64}$/.test(value)) {
+    throw new Error(`${label} must match ^[A-Za-z0-9_.-]{1,64}$.`);
+  }
+
+  return value;
 }

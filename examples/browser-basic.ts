@@ -1,9 +1,8 @@
-import { PersistlyGameSaves, PersistlySlotStatus } from "../src/index.js";
+import { PersistlyGameSaveStatus, PersistlyGameSaves } from "../src/index.js";
 
 await PersistlyGameSaves.configure({
   runtimeKey: "ps_test_replace_me",
   storage: "localStorage",
-  syncIntervalSeconds: 40,
 });
 
 const result = await PersistlyGameSaves.shared.saveSlot("autosave", {
@@ -11,6 +10,6 @@ const result = await PersistlyGameSaves.shared.saveSlot("autosave", {
   coins: 1200,
 });
 
-if (result.status === PersistlySlotStatus.LocalSaved) {
+if (result.status === PersistlyGameSaveStatus.LocalSaved) {
   console.log("Saved locally. Persistly will sync when allowed.");
 }

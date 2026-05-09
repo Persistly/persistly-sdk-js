@@ -53,8 +53,10 @@ export interface CreateProfileInput {
   externalProfileRef?: ExternalProfileRef;
   profileMetadata?: JsonObject;
   accountData?: JsonObject;
-  characterMetadata: JsonObject;
-  characterState: JsonObject;
+  character?: {
+    metadata: JsonObject;
+    state: JsonObject;
+  };
 }
 
 export interface ProfileEnvelope {
@@ -67,7 +69,6 @@ export interface ProfileEnvelope {
 
 export interface CreatedProfileEnvelope extends ProfileEnvelope {
   profileSessionToken: string;
-  character: Save;
   syncPolicy: SyncPolicy;
 }
 
@@ -93,6 +94,13 @@ export interface SyncProfileCharacterInput extends ProfileCharacterInput {
   baseVersion?: number;
   metadata?: JsonObject;
   state: JsonObject;
+}
+
+export interface SyncProfileAccountDataInput extends ProfileSessionInput {
+  baseVersion: number;
+  accountData?: JsonObject;
+  accountDataPatch?: JsonObject;
+  metadata?: JsonObject | null;
 }
 
 export interface SyncAcceptedResult {
@@ -174,6 +182,7 @@ export class PersistlyClient {
   }
 
   async createProfile(payload: CreateProfileInput): Promise<CreatedProfileEnvelope> {
+    validateProfileCreatePayload(payload);
     const response = await this.requestJson("/api/v1/profiles", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -188,22 +197,80 @@ export class PersistlyClient {
     return envelope;
   }
 
+  async syncProfileAccountData(payload: SyncProfileAccountDataInput): Promise<SyncSaveResult> {
+    assertSaveId(payload.profileSaveId, "syncProfileAccountData");
+    assertProfileSessionToken(payload.profileSessionToken, "syncProfileAccountData");
+    validateSyncProfileAccountDataPayload(payload);
+    validatePayloadLimits({
+      ...(payload.metadata === undefined || payload.metadata === null ? {} : { metadata: payload.metadata }),
+      ...(payload.accountData === undefined && payload.accountDataPatch === undefined
+        ? {}
+        : { state: payload.accountData ?? payload.accountDataPatch }),
+    });
+
+    const body: Record<string, unknown> = {
+      baseVersion: payload.baseVersion,
+    };
+    if (payload.accountData !== undefined) {
+      body.accountData = payload.accountData;
+    }
+    if (payload.accountDataPatch !== undefined) {
+      body.accountDataPatch = payload.accountDataPatch;
+    }
+    if ("metadata" in payload) {
+      body.metadata = payload.metadata;
+    }
+
+    const response = await this.requestRaw(
+      `/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}/account-data/sync`,
+      {
+        method: "POST",
+        headers: profileSessionHeaders(payload.profileSessionToken),
+        body: JSON.stringify(body),
+      },
+    );
+    const json = await parseJsonResponse(response);
+
+    if (response.status === 200) {
+      const result = parseAcceptedSyncResult(json);
+      await this.cache.set(result.save);
+      return result;
+    }
+
+    if (response.status === 409 && isSyncConflictPayload(json)) {
+      const result = parseConflictSyncResult(json);
+      await this.cache.set(result.save);
+      return result;
+    }
+
+    throw parseApiError(response.status, json);
+  }
+
   async loadProfile(payload: ProfileSessionInput): Promise<Save> {
+    const envelope = await this.loadProfileEnvelope(payload);
+    return envelope.profile;
+  }
+
+  async loadProfileEnvelope(payload: ProfileSessionInput): Promise<ProfileEnvelope> {
     assertSaveId(payload.profileSaveId, "loadProfile");
     assertProfileSessionToken(payload.profileSessionToken, "loadProfile");
     const response = await this.requestJson(`/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}`, {
       method: "GET",
       headers: profileSessionHeaders(payload.profileSessionToken),
     });
-    const profile = parseProfileEnvelope(response).profile;
+    const envelope = parseProfileEnvelope(response);
 
-    await this.cache.set(profile);
-    return profile;
+    await this.cache.set(envelope.profile);
+    if (envelope.character) {
+      await this.cache.set(envelope.character);
+    }
+    return envelope;
   }
 
   async createProfileCharacter(payload: CreateProfileCharacterInput): Promise<ProfileCharacterEnvelope> {
     assertSaveId(payload.profileSaveId, "createProfileCharacter");
     assertProfileSessionToken(payload.profileSessionToken, "createProfileCharacter");
+    requireProfileCharacterSlotMetadata(payload.metadata, "createProfileCharacter.metadata");
     validatePayloadLimits({ metadata: payload.metadata, state: payload.state });
     const response = await this.requestJson(`/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}/characters`, {
       method: "POST",
@@ -243,6 +310,9 @@ export class PersistlyClient {
     assertSaveId(payload.profileSaveId, "syncProfileCharacter");
     assertSaveId(payload.characterSaveId, "syncProfileCharacter");
     assertProfileSessionToken(payload.profileSessionToken, "syncProfileCharacter");
+    if (payload.metadata !== undefined) {
+      validateReservedProfileCharacterMetadata(payload.metadata, "syncProfileCharacter.metadata");
+    }
     validatePayloadLimits(payload);
     const baseVersion = payload.baseVersion ?? (await this.cache.get(payload.characterSaveId))?.version;
 
@@ -272,13 +342,33 @@ export class PersistlyClient {
       return result;
     }
 
-    if (response.status === 409) {
+    if (response.status === 409 && isSyncConflictPayload(json)) {
       const result = parseConflictSyncResult(json);
       await this.cache.set(result.save);
       return result;
     }
 
     throw parseApiError(response.status, json);
+  }
+
+  async archiveProfileCharacter(payload: ProfileCharacterInput): Promise<ProfileEnvelope> {
+    assertSaveId(payload.profileSaveId, "archiveProfileCharacter");
+    assertSaveId(payload.characterSaveId, "archiveProfileCharacter");
+    assertProfileSessionToken(payload.profileSessionToken, "archiveProfileCharacter");
+    const response = await this.requestJson(
+      `/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}/characters/${encodeURIComponent(payload.characterSaveId)}/archive`,
+      {
+        method: "POST",
+        headers: profileSessionHeaders(payload.profileSessionToken),
+      },
+    );
+    const envelope = parseProfileEnvelope(response);
+
+    await this.cache.set(envelope.profile);
+    if (envelope.character) {
+      await this.cache.set(envelope.character);
+    }
+    return envelope;
   }
 
   async getRuntimeConfig(): Promise<RuntimeConfig> {
@@ -465,9 +555,6 @@ function requireCreatedProfileEnvelope(envelope: ProfileEnvelope): CreatedProfil
   if (typeof envelope.profileSessionToken !== "string" || envelope.profileSessionToken.trim() === "") {
     throw new PersistlyConfigurationError("Create profile response must include a non-empty profileSessionToken.");
   }
-  if (envelope.character === undefined) {
-    throw new PersistlyConfigurationError("Create profile response must include the first character save.");
-  }
   if (envelope.syncPolicy === undefined) {
     throw new PersistlyConfigurationError("Create profile response must include syncPolicy.");
   }
@@ -475,7 +562,6 @@ function requireCreatedProfileEnvelope(envelope: ProfileEnvelope): CreatedProfil
   return {
     ...envelope,
     profileSessionToken: envelope.profileSessionToken,
-    character: envelope.character,
     syncPolicy: envelope.syncPolicy,
   };
 }
@@ -565,6 +651,62 @@ function parseConflictSyncResult(value: unknown): SyncConflictResult {
   };
 }
 
+function isSyncConflictPayload(value: unknown): boolean {
+  return typeof value === "object" && value !== null && (value as { status?: unknown }).status === "conflict";
+}
+
+function validateProfileCreatePayload(payload: CreateProfileInput): void {
+  validatePayloadLimits({
+    ...(payload.profileMetadata === undefined ? {} : { metadata: payload.profileMetadata }),
+    ...(payload.accountData === undefined ? {} : { state: payload.accountData }),
+  });
+  if (payload.character) {
+    requireProfileCharacterSlotMetadata(payload.character.metadata, "createProfile.character.metadata");
+    validatePayloadLimits(payload.character);
+  }
+}
+
+function validateSyncProfileAccountDataPayload(payload: SyncProfileAccountDataInput): void {
+  if (payload.accountData !== undefined && payload.accountDataPatch !== undefined) {
+    throw new PersistlyConfigurationError("syncProfileAccountData accepts either accountData or accountDataPatch, not both.");
+  }
+  if (payload.accountData === undefined && payload.accountDataPatch === undefined && !("metadata" in payload)) {
+    throw new PersistlyConfigurationError(
+      "syncProfileAccountData requires accountData, accountDataPatch, or metadata.",
+    );
+  }
+}
+
+function requireProfileCharacterSlotMetadata(metadata: JsonObject, label: string): void {
+  const record = parseObject(metadata, label);
+  const persistly = record._persistly;
+
+  if (persistly === undefined) {
+    throw new PersistlyConfigurationError(`${label}._persistly.slotKey is required.`);
+  }
+
+  validatePersistlySlotMetadata(persistly, label);
+}
+
+function validateReservedProfileCharacterMetadata(metadata: JsonObject, label: string): void {
+  const record = parseObject(metadata, label);
+  const persistly = record._persistly;
+  if (persistly !== undefined) {
+    validatePersistlySlotMetadata(persistly, label);
+  }
+}
+
+function validatePersistlySlotMetadata(persistly: unknown, label: string): void {
+  const persistlyRecord = parseObject(persistly, `${label}._persistly`);
+  const slotKey = persistlyRecord.slotKey;
+  if (typeof slotKey !== "string" || !/^[A-Za-z0-9_.-]{1,64}$/.test(slotKey)) {
+    throw new PersistlyConfigurationError(`${label}._persistly.slotKey must match ^[A-Za-z0-9_.-]{1,64}$.`);
+  }
+  if (Object.keys(persistlyRecord).length !== 1) {
+    throw new PersistlyConfigurationError(`${label}._persistly is reserved and may only contain slotKey.`);
+  }
+}
+
 function parseSave(value: unknown): Save {
   try {
     return parseSaveSnapshot(value);
@@ -606,6 +748,8 @@ function isPersistlyErrorCode(value: unknown): value is PersistlyErrorCode {
     value === "forbidden" ||
     value === "not_found" ||
     value === "conflict" ||
+    value === "slot_already_exists" ||
+    value === "character_archived" ||
     value === "rate_limited" ||
     value === "payload_too_large" ||
     value === "server_error"

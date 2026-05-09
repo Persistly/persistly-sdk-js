@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "bundle": "persistly-contract-v0.2.0",
-  "version": "v0.2.0",
+  "bundle": "persistly-contract-v0.3.0",
+  "version": "v0.3.0",
   "exampleSet": "strict",
   "files": [
     {
@@ -36,8 +36,8 @@
     },
     {
       "path": "openapi/persistly-api.yaml",
-      "sha256": "cd799fe933c2dc644526cf62cbe4b738c10030901fbb9d1d75b5bb963ebf5e27",
-      "bytes": 25201
+      "sha256": "0ac880d88a85a453841c3fb67355e4539bdfa255b42ba471988a32037e6c3e91",
+      "bytes": 32573
     }
   ]
 }

@@ -5,10 +5,10 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
-const bundleRoot = path.join(repoRoot, "contracts", "persistly-contract-v0.2.0");
+const bundleRoot = path.join(repoRoot, "contracts", "persistly-contract-v0.3.0");
 const manifestPath = path.join(bundleRoot, "manifest.json");
-const expectedBundle = "persistly-contract-v0.2.0";
-const expectedVersion = "v0.2.0";
+const expectedBundle = "persistly-contract-v0.3.0";
+const expectedVersion = "v0.3.0";
 const expectedSchemaVersion = 1;
 const expectedExampleSet = "strict";
 const requiredPaths = new Set([
@@ -89,7 +89,7 @@ if (unexpectedFiles.length > 0) {
   throw new Error(`Contract bundle contains unexpected files: ${unexpectedFiles.join(", ")}`);
 }
 
-console.log("Contract bundle persistly-contract-v0.2.0 is present and matches manifest integrity metadata.");
+console.log("Contract bundle persistly-contract-v0.3.0 is present and matches manifest integrity metadata.");
 
 async function listBundleFiles(root, relativePath = "") {
   const entries = await readdir(path.join(root, relativePath), { withFileTypes: true });
