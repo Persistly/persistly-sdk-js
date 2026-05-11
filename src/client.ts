@@ -106,6 +106,10 @@ export interface SyncProfileAccountDataInput extends ProfileSessionInput {
 export interface SyncAcceptedResult {
   status: typeof PersistlySyncStatus.Accepted;
   save: Save;
+  version: number;
+  updatedAt: string;
+  historyRetained: boolean;
+  warnings?: string[];
 }
 
 export interface SyncConflictDetails {
@@ -198,7 +202,7 @@ export class PersistlyClient {
   }
 
   async syncProfileAccountData(payload: SyncProfileAccountDataInput): Promise<SyncSaveResult> {
-    assertSaveId(payload.profileSaveId, "syncProfileAccountData");
+    const profileSaveId = assertSaveId(payload.profileSaveId, "syncProfileAccountData");
     assertProfileSessionToken(payload.profileSessionToken, "syncProfileAccountData");
     validateSyncProfileAccountDataPayload(payload);
     validatePayloadLimits({
@@ -232,7 +236,19 @@ export class PersistlyClient {
     const json = await parseJsonResponse(response);
 
     if (response.status === 200) {
-      const result = parseAcceptedSyncResult(json);
+      const accepted = parseAcceptedSyncResult(json);
+      const cached = (await this.cache.get(profileSaveId)) ?? undefined;
+      const result = syncAcceptedResultWithSave(
+        accepted,
+        accepted.save ??
+          synthesizeProfileSaveFromSync({
+            saveId: profileSaveId,
+            cached,
+            accountData: payload.accountData,
+            accountDataPatch: payload.accountDataPatch,
+            metadata: "metadata" in payload ? payload.metadata : undefined,
+          }),
+      );
       await this.cache.set(result.save);
       return result;
     }
@@ -314,7 +330,8 @@ export class PersistlyClient {
       validateReservedProfileCharacterMetadata(payload.metadata, "syncProfileCharacter.metadata");
     }
     validatePayloadLimits(payload);
-    const baseVersion = payload.baseVersion ?? (await this.cache.get(payload.characterSaveId))?.version;
+    const cached = (await this.cache.get(payload.characterSaveId)) ?? undefined;
+    const baseVersion = payload.baseVersion ?? cached?.version;
 
     if (!baseVersion) {
       throw new PersistlyConfigurationError(
@@ -337,7 +354,17 @@ export class PersistlyClient {
     const json = await parseJsonResponse(response);
 
     if (response.status === 200) {
-      const result = parseAcceptedSyncResult(json);
+      const accepted = parseAcceptedSyncResult(json);
+      const result = syncAcceptedResultWithSave(
+        accepted,
+        accepted.save ??
+          synthesizeSaveFromSync({
+            saveId: payload.characterSaveId,
+            cached,
+            metadata: payload.metadata,
+            state: payload.state,
+          }),
+      );
       await this.cache.set(result.save);
       return result;
     }
@@ -392,7 +419,8 @@ export class PersistlyClient {
   async syncSave(saveId: string, payload: SyncSaveInput): Promise<SyncSaveResult> {
     const canonicalSaveId = assertSaveId(saveId, "syncSave");
     validatePayloadLimits(payload);
-    const baseVersion = payload.baseVersion ?? (await this.cache.get(canonicalSaveId))?.version;
+    const cached = (await this.cache.get(canonicalSaveId)) ?? undefined;
+    const baseVersion = payload.baseVersion ?? cached?.version;
 
     if (!baseVersion) {
       throw new PersistlyConfigurationError(
@@ -411,7 +439,17 @@ export class PersistlyClient {
     const json = await parseJsonResponse(response);
 
     if (response.status === 200) {
-      const result = parseAcceptedSyncResult(json);
+      const accepted = parseAcceptedSyncResult(json);
+      const result = syncAcceptedResultWithSave(
+        accepted,
+        accepted.save ??
+          synthesizeSaveFromSync({
+            saveId: canonicalSaveId,
+            cached,
+            metadata: payload.metadata,
+            state: payload.state,
+          }),
+      );
       await this.cache.set(result.save);
       return result;
     }
@@ -617,17 +655,103 @@ function parsePositiveInteger(value: unknown, label: string): number {
   return value;
 }
 
-function parseAcceptedSyncResult(value: unknown): SyncAcceptedResult {
+type AcceptedSyncResponse = Omit<SyncAcceptedResult, "save"> & { save?: Save };
+
+function parseAcceptedSyncResult(value: unknown): AcceptedSyncResponse {
   const record = parseObject(value, "Accepted sync response");
 
   if (record.status !== "accepted") {
     throw new PersistlyConfigurationError("Accepted sync response had an unexpected status.");
   }
+  const save = record.save === undefined ? undefined : parseSave(record.save);
+  const version = record.version ?? save?.version;
+  const updatedAt = record.updatedAt ?? save?.updatedAt;
+  const historyRetained = record.historyRetained ?? false;
+  const warnings = record.warnings;
+
+  if (typeof version !== "number" || !Number.isInteger(version) || version < 1) {
+    throw new PersistlyConfigurationError("Accepted sync response version must be an integer greater than or equal to 1.");
+  }
+  if (typeof updatedAt !== "string" || Number.isNaN(Date.parse(updatedAt))) {
+    throw new PersistlyConfigurationError("Accepted sync response updatedAt must be a valid date-time string.");
+  }
+  if (typeof historyRetained !== "boolean") {
+    throw new PersistlyConfigurationError("Accepted sync response historyRetained must be a boolean.");
+  }
+  if (warnings !== undefined && (!Array.isArray(warnings) || warnings.some((warning) => typeof warning !== "string"))) {
+    throw new PersistlyConfigurationError("Accepted sync response warnings must be an array of strings.");
+  }
+  const parsedWarnings = warnings as string[] | undefined;
 
   return {
     status: PersistlySyncStatus.Accepted,
-    save: parseSave(record.save),
+    ...(save === undefined ? {} : { save }),
+    version,
+    updatedAt,
+    historyRetained,
+    ...(parsedWarnings === undefined ? {} : { warnings: parsedWarnings }),
   };
+}
+
+function syncAcceptedResultWithSave(result: AcceptedSyncResponse, save: Save): SyncAcceptedResult {
+  return {
+    ...result,
+    save: {
+      ...save,
+      version: result.version,
+      updatedAt: result.updatedAt,
+    },
+  };
+}
+
+function synthesizeSaveFromSync(input: {
+  saveId: string;
+  cached: Save | undefined;
+  metadata: JsonObject | undefined;
+  state: JsonObject;
+}): Save {
+  return {
+    saveId: input.saveId,
+    playerRef: input.cached?.playerRef ?? null,
+    metadata: cloneJsonObject(input.metadata ?? input.cached?.metadata ?? {}),
+    state: cloneJsonObject(input.state),
+    version: 1,
+    createdAt: input.cached?.createdAt ?? new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  };
+}
+
+function synthesizeProfileSaveFromSync(input: {
+  saveId: string;
+  cached: Save | undefined;
+  accountData: JsonObject | undefined;
+  accountDataPatch: JsonObject | undefined;
+  metadata: JsonObject | null | undefined;
+}): Save {
+  const cachedState = input.cached ? parseObject(input.cached.state, "Cached profile state") : {};
+  const cachedAccountData = parseObject(cachedState.accountData ?? {}, "Cached profile accountData");
+  const accountData =
+    input.accountData === undefined
+      ? { ...cachedAccountData, ...cloneJsonObject(input.accountDataPatch ?? {}) }
+      : cloneJsonObject(input.accountData);
+
+  return {
+    saveId: input.saveId,
+    playerRef: input.cached?.playerRef ?? null,
+    metadata: input.metadata === null ? {} : cloneJsonObject(input.metadata ?? input.cached?.metadata ?? {}),
+    state: {
+      schema: "persistly.profile.v1",
+      accountData,
+      characterSlots: Array.isArray(cachedState.characterSlots) ? structuredClone(cachedState.characterSlots) : [],
+    },
+    version: 1,
+    createdAt: input.cached?.createdAt ?? new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  };
+}
+
+function cloneJsonObject(value: JsonObject): JsonObject {
+  return structuredClone(value);
 }
 
 function parseConflictSyncResult(value: unknown): SyncConflictResult {

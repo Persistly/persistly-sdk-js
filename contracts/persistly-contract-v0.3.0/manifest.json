@@ -31,13 +31,13 @@
     },
     {
       "path": "limits/runtime-limits.json",
-      "sha256": "344d3b26eed325b6ba2de8d000e9dd4f8e09559d28b8a795f3d9453e0d039dea",
-      "bytes": 278
+      "sha256": "12253d7260e2a48e738ea2f44b8f12044de198f93e7aaba7222143909fcb9d0a",
+      "bytes": 2270
     },
     {
       "path": "openapi/persistly-api.yaml",
-      "sha256": "0ac880d88a85a453841c3fb67355e4539bdfa255b42ba471988a32037e6c3e91",
-      "bytes": 32573
+      "sha256": "759027e05b49d37a1b79997e51dd98b66cffdb2bec762ffea11194f708312f7e",
+      "bytes": 33193
     }
   ]
 }

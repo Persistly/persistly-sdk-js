@@ -186,15 +186,9 @@ test("syncSave uses the cached version and stores accepted saves", async () => {
       requests.push({ url: String(input), init });
       return createJsonResponse(200, {
         status: "accepted",
-        save: {
-          saveId: "sv_sync",
-          playerRef: "player-184",
-          metadata: { slot: 2 },
-          state: { gold: 125 },
-          version: 4,
-          createdAt: "2026-04-09T10:00:00Z",
-          updatedAt: "2026-04-09T10:06:00Z",
-        },
+        version: 4,
+        updatedAt: "2026-04-09T10:06:00Z",
+        historyRetained: true,
       });
     },
   });
@@ -204,6 +198,10 @@ test("syncSave uses the cached version and stores accepted saves", async () => {
   });
 
   assert.equal(result.status, PersistlySyncStatus.Accepted);
+  assert.equal(result.version, 4);
+  assert.equal(result.updatedAt, "2026-04-09T10:06:00Z");
+  assert.equal(result.historyRetained, true);
+  assert.deepEqual(result.save.state, { gold: 125 });
   assert.deepEqual(await cache.get("sv_sync"), result.save);
   assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/saves/sv_sync/sync`);
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
@@ -626,19 +624,9 @@ test("syncProfileAccountData posts the account-data route and preserves profile 
       requests.push({ url: String(input), init });
       return createJsonResponse(200, {
         status: "accepted",
-        save: {
-          saveId: "sv_profile",
-          playerRef: "player-184",
-          metadata: { profileLabel: "Main" },
-          state: {
-            schema: "persistly.profile.v1",
-            accountData: { diamonds: 1500 },
-            characterSlots: [],
-          },
-          version: 4,
-          createdAt: "2026-04-09T10:00:00Z",
-          updatedAt: "2026-04-09T10:05:00Z",
-        },
+        version: 4,
+        updatedAt: "2026-04-09T10:05:00Z",
+        historyRetained: false,
       });
     },
   });
@@ -652,6 +640,12 @@ test("syncProfileAccountData posts the account-data route and preserves profile 
   });
 
   assert.equal(result.status, PersistlySyncStatus.Accepted);
+  assert.equal(result.save.version, 4);
+  assert.deepEqual(result.save.state, {
+    schema: "persistly.profile.v1",
+    accountData: { diamonds: 1500 },
+    characterSlots: [],
+  });
   assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/profiles/sv_profile/account-data/sync`);
   assert.equal(new Headers(requests[0]?.init?.headers).get("x-persistly-profile-session"), "pst_session");
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {

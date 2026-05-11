@@ -457,18 +457,9 @@ paths:
                   summary: Sync accepted
                   value:
                     status: accepted
-                    save:
-                      saveId: sv_01HXYZ
-                      playerRef: player-184
-                      metadata:
-                        characterName: Ayla
-                        slot: 2
-                      state:
-                        gold: 120
-                        level: 2
-                      version: 4
-                      createdAt: 2026-04-09T10:00:00Z
-                      updatedAt: 2026-04-09T10:05:00Z
+                    version: 4
+                    updatedAt: 2026-04-09T10:05:00Z
+                    historyRetained: true
         '409':
           description: Conflict
           content:
@@ -799,25 +790,52 @@ components:
           $ref: '#/components/schemas/Save'
     SaveOperationResponse:
       type: object
-      required: [status, save]
+      required: [status]
       properties:
         status:
           type: string
           enum: [accepted, conflict]
         save:
           $ref: '#/components/schemas/Save'
+          description: Returned for conflict responses. Accepted sync responses are lightweight and omit the save payload.
+        version:
+          type: integer
+          minimum: 1
+          description: Current save version for accepted sync responses.
+        updatedAt:
+          type: string
+          format: date-time
+          description: Current save update timestamp for accepted sync responses.
+        historyRetained:
+          type: boolean
+          description: Whether this accepted sync was retained as a restore-history snapshot.
+        warnings:
+          type: array
+          items:
+            type: string
         details:
           type: object
           additionalProperties: true
     SyncAcceptedResponse:
       type: object
-      required: [status, save]
+      required: [status, version, updatedAt, historyRetained]
       properties:
         status:
           type: string
           enum: [accepted]
-        save:
-          $ref: '#/components/schemas/Save'
+        version:
+          type: integer
+          minimum: 1
+        updatedAt:
+          type: string
+          format: date-time
+        historyRetained:
+          type: boolean
+          description: Whether this sync was retained as a restore-history snapshot.
+        warnings:
+          type: array
+          items:
+            type: string
     SyncConflictResponse:
       type: object
       required: [status, save, details]
