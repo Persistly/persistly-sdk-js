@@ -352,11 +352,10 @@ test("account-data writes are local-first and forceSyncProfile syncs profile acc
       }
       return createJsonResponse(200, {
         status: PersistlySyncStatus.Accepted,
-        save: createSave("sv_profile", {
-          schema: "persistly.profile.v1",
-          accountData: { diamonds: 1300, unlockedSlots: 4 },
-          characterSlots: [],
-        }, 2),
+        version: 8,
+        updatedAt: "2026-04-10T00:12:00Z",
+        historyRetained: false,
+        warnings: ["near_monthly_request_quota"],
       });
     },
   });
@@ -366,6 +365,9 @@ test("account-data writes are local-first and forceSyncProfile syncs profile acc
   const result = await persistly.forceSyncProfile({ bypassCooldown: true });
 
   assert.equal(result.status, PersistlyGameSaveStatus.Synced);
+  assert.equal(result.historyRetained, false);
+  assert.deepEqual(result.warnings, ["near_monthly_request_quota"]);
+  assert.equal(result.profile?.version, 8);
   assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/profiles/sv_profile`);
   assert.equal(requests[1]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/profiles/sv_profile/account-data/sync`);
   assert.deepEqual(JSON.parse(String(requests[1]?.init?.body)), {

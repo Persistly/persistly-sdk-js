@@ -58,7 +58,11 @@ test("createSave posts the contract payload and caches the canonical save", asyn
   assert.deepEqual(await cache.get(expected.save.saveId), expected.save);
   assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/saves`);
   assert.equal(requests[0]?.init?.method, "POST");
-  assert.match(String(requests[0]?.init?.headers && new Headers(requests[0].init.headers).get("authorization")), /^Bearer ps_test_runtime$/);
+  const headers = new Headers(requests[0]?.init?.headers);
+  assert.match(String(headers.get("authorization")), /^Bearer ps_test_runtime$/);
+  assert.equal(headers.get("x-persistly-sdk"), "javascript");
+  assert.equal(headers.get("x-persistly-sdk-version"), "0.10.0");
+  assert.ok(headers.get("x-persistly-platform"));
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
     playerRef: "player-184",
     metadata: { slot: 2 },
@@ -913,9 +917,12 @@ test("profile session forbidden responses surface as typed forbidden errors", as
 });
 
 test("getRuntimeConfig returns the sync policy", async () => {
+  const requests: string[] = [];
   const client = new PersistlyClient({
     runtimeKey: "ps_test_runtime",
-    fetch: async () =>
+    fetch: async (input) => {
+      requests.push(String(input));
+      return (
       createJsonResponse(200, {
         syncPolicy: {
           minRemoteSyncIntervalSeconds: 40,
@@ -925,11 +932,25 @@ test("getRuntimeConfig returns the sync policy", async () => {
           syncOnReconnect: true,
           maxQueuedLocalSnapshots: 25,
         },
-      }),
+        gameConfig: {
+          enabled: true,
+          version: 3,
+          sizeBytes: 37,
+          hasData: true,
+          eventName: "launch",
+          config: { season: "spring" },
+        },
+      })
+      );
+    },
   });
 
-  const config = await client.getRuntimeConfig();
+  const config = await client.getRuntimeConfig({ gameConfigVersion: 2 });
 
+  assert.equal(requests[0], `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/runtime-config?gameConfigVersion=2`);
   assert.equal(config.syncPolicy.minRemoteSyncIntervalSeconds, 40);
   assert.equal(config.syncPolicy.forceSyncCooldownSeconds, 10);
+  assert.equal(config.gameConfig?.enabled, true);
+  assert.equal(config.gameConfig?.version, 3);
+  assert.deepEqual(config.gameConfig?.config, { season: "spring" });
 });

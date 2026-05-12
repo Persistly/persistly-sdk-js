@@ -46,6 +46,21 @@ export interface SyncPolicy {
 
 export interface RuntimeConfig {
   syncPolicy: SyncPolicy;
+  gameConfig?: RuntimeGameConfig;
+}
+
+export interface RuntimeConfigOptions {
+  gameConfigVersion?: number;
+}
+
+export interface RuntimeGameConfig {
+  enabled: boolean;
+  version?: number;
+  unchanged?: boolean;
+  sizeBytes?: number;
+  hasData?: boolean;
+  eventName?: string;
+  config?: JsonObject;
 }
 
 export interface CreateProfileInput {
@@ -135,15 +150,20 @@ export interface PersistlyClientOptions {
   runtimeKey: string;
   cache?: SaveCacheStore;
   fetch?: typeof globalThis.fetch;
+  clientVersion?: string;
+  platform?: string;
+  engineVersion?: string;
 }
 
 export const DEFAULT_PERSISTLY_API_BASE_URL = "https://api.persistly.app";
+export const PERSISTLY_JS_SDK_VERSION = "0.10.0";
 
 export class PersistlyClient {
   private readonly baseUrl: string;
   private readonly runtimeKey: string;
   private readonly cache: SaveCacheStore;
   private readonly fetchImpl: typeof globalThis.fetch;
+  private readonly diagnosticsHeaders: Record<string, string>;
 
   constructor(options: PersistlyClientOptions) {
     if (!options.runtimeKey) {
@@ -160,6 +180,7 @@ export class PersistlyClient {
     this.runtimeKey = options.runtimeKey;
     this.cache = options.cache ?? new MemorySaveCache();
     this.fetchImpl = resolvedFetch;
+    this.diagnosticsHeaders = buildDiagnosticsHeaders(options);
   }
 
   async updateLocal(save: Save): Promise<Save> {
@@ -398,8 +419,9 @@ export class PersistlyClient {
     return envelope;
   }
 
-  async getRuntimeConfig(): Promise<RuntimeConfig> {
-    const response = await this.requestJson("/api/v1/runtime-config", {
+  async getRuntimeConfig(options: RuntimeConfigOptions = {}): Promise<RuntimeConfig> {
+    const path = runtimeConfigPath(options);
+    const response = await this.requestJson(path, {
       method: "GET",
     });
     return parseRuntimeConfig(response);
@@ -481,6 +503,7 @@ export class PersistlyClient {
         headers: {
           authorization: `Bearer ${this.runtimeKey}`,
           "content-type": "application/json",
+          ...this.diagnosticsHeaders,
           ...init.headers,
         },
       });
@@ -488,6 +511,51 @@ export class PersistlyClient {
       throw new PersistlyTransportError("Persistly request failed before the runtime API responded.", error);
     }
   }
+}
+
+function buildDiagnosticsHeaders(options: PersistlyClientOptions): Record<string, string> {
+  return {
+    "x-persistly-sdk": "javascript",
+    "x-persistly-sdk-version": PERSISTLY_JS_SDK_VERSION,
+    "x-persistly-platform": normalizeDiagnosticsValue(options.platform) ?? detectJavaScriptPlatform(),
+    ...(normalizeDiagnosticsValue(options.engineVersion) === undefined
+      ? {}
+      : { "x-persistly-engine-version": normalizeDiagnosticsValue(options.engineVersion)! }),
+    ...(normalizeDiagnosticsValue(options.clientVersion) === undefined
+      ? {}
+      : { "x-persistly-client-version": normalizeDiagnosticsValue(options.clientVersion)! }),
+  };
+}
+
+function detectJavaScriptPlatform(): string {
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    return "browser";
+  }
+  if (typeof process !== "undefined" && process.versions?.node) {
+    return "node";
+  }
+  return "javascript";
+}
+
+function normalizeDiagnosticsValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function runtimeConfigPath(options: RuntimeConfigOptions): string {
+  if (options.gameConfigVersion === undefined) {
+    return "/api/v1/runtime-config";
+  }
+
+  if (
+    typeof options.gameConfigVersion !== "number" ||
+    !Number.isInteger(options.gameConfigVersion) ||
+    options.gameConfigVersion < 0
+  ) {
+    throw new PersistlyConfigurationError("getRuntimeConfig gameConfigVersion must be a non-negative integer.");
+  }
+
+  return `/api/v1/runtime-config?gameConfigVersion=${encodeURIComponent(String(options.gameConfigVersion))}`;
 }
 
 function assertSaveId(saveId: string, operation: string): string {
@@ -617,9 +685,54 @@ function requireProfileCharacterEnvelope(envelope: ProfileEnvelope): ProfileChar
 
 function parseRuntimeConfig(value: unknown): RuntimeConfig {
   const record = parseObject(value, "Runtime config response");
-  return {
+  const config: RuntimeConfig = {
     syncPolicy: parseSyncPolicy(record.syncPolicy),
   };
+  if (record.gameConfig !== undefined) {
+    config.gameConfig = parseRuntimeGameConfig(record.gameConfig);
+  }
+  return config;
+}
+
+function parseRuntimeGameConfig(value: unknown): RuntimeGameConfig {
+  const record = parseObject(value, "Runtime game config");
+
+  if (typeof record.enabled !== "boolean") {
+    throw new PersistlyConfigurationError("gameConfig.enabled must be a boolean.");
+  }
+
+  const gameConfig: RuntimeGameConfig = {
+    enabled: record.enabled,
+  };
+  if (record.version !== undefined) {
+    gameConfig.version = parseNonNegativeInteger(record.version, "gameConfig.version");
+  }
+  if (record.unchanged !== undefined) {
+    if (typeof record.unchanged !== "boolean") {
+      throw new PersistlyConfigurationError("gameConfig.unchanged must be a boolean.");
+    }
+    gameConfig.unchanged = record.unchanged;
+  }
+  if (record.sizeBytes !== undefined) {
+    gameConfig.sizeBytes = parseNonNegativeInteger(record.sizeBytes, "gameConfig.sizeBytes");
+  }
+  if (record.hasData !== undefined) {
+    if (typeof record.hasData !== "boolean") {
+      throw new PersistlyConfigurationError("gameConfig.hasData must be a boolean.");
+    }
+    gameConfig.hasData = record.hasData;
+  }
+  if (record.eventName !== undefined) {
+    if (typeof record.eventName !== "string") {
+      throw new PersistlyConfigurationError("gameConfig.eventName must be a string.");
+    }
+    gameConfig.eventName = record.eventName;
+  }
+  if (record.config !== undefined) {
+    gameConfig.config = parseObject(record.config, "gameConfig.config");
+  }
+
+  return gameConfig;
 }
 
 function parseSyncPolicy(value: unknown): SyncPolicy {
@@ -651,6 +764,13 @@ function parseSyncPolicy(value: unknown): SyncPolicy {
 function parsePositiveInteger(value: unknown, label: string): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
     throw new PersistlyConfigurationError(`${label} must be a positive integer.`);
+  }
+  return value;
+}
+
+function parseNonNegativeInteger(value: unknown, label: string): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    throw new PersistlyConfigurationError(`${label} must be a non-negative integer.`);
   }
   return value;
 }

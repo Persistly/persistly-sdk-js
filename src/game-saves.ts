@@ -110,6 +110,8 @@ export type PersistlyGameSaveSyncResult =
       slotKey?: string;
       save?: Save;
       profile?: Save;
+      historyRetained?: boolean;
+      warnings?: string[];
     }
   | {
       status: typeof PersistlyGameSaveStatus.Conflict;
@@ -527,7 +529,13 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
 
       const syncedProfile = profileFromSave(result.save, profile.profileSessionToken, profile.syncPolicy);
       await this.store.setProfile({ ...syncedProfile, dirty: false, lastRemoteSyncedAt: this.now() });
-      return this.emit({ status: PersistlyGameSaveStatus.Synced, target: PersistlyGameSaveTarget.Profile, profile: result.save });
+      return this.emit({
+        status: PersistlyGameSaveStatus.Synced,
+        target: PersistlyGameSaveTarget.Profile,
+        profile: result.save,
+        historyRetained: result.historyRetained,
+        ...(result.warnings === undefined ? {} : { warnings: result.warnings }),
+      });
     } catch (error) {
       return this.mapSyncError(error, PersistlyGameSaveTarget.Profile);
     }
@@ -822,7 +830,14 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     }
 
     await this.store.setSlot(slotFromSave(slot.slotKey, result.save, slot.state, slot.metadata, this.now()));
-    return { status: PersistlyGameSaveStatus.Synced, target: PersistlyGameSaveTarget.Slot, slotKey: slot.slotKey, save: result.save };
+    return {
+      status: PersistlyGameSaveStatus.Synced,
+      target: PersistlyGameSaveTarget.Slot,
+      slotKey: slot.slotKey,
+      save: result.save,
+      historyRetained: result.historyRetained,
+      ...(result.warnings === undefined ? {} : { warnings: result.warnings }),
+    };
   }
 
   private async getOrCreateLocalProfile(): Promise<ProfileRecord> {
