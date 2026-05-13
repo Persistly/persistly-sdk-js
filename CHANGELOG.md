@@ -10,7 +10,7 @@
 
 - Renames the optional public save reference field to `playerRef`.
 - Adds `LocalStorageSaveCache` for browser games that persist save snapshots in `localStorage`.
-- Pins `persistly-contract-v0.2.0` with the RC `playerRef` contract.
+- Pins `persistly-contract-v0.2.0` with the release-path `playerRef` contract.
 
 ## 0.9.0
 
