@@ -9,7 +9,7 @@ This package is `0.10.0` and pins `persistly-contract-v0.3.0`.
 ## Install
 
 ```bash
-npm install @persistly/sdk
+npm install @persistlyapp/sdk
 ```
 
 ## Quickstart
@@ -18,7 +18,7 @@ npm install @persistly/sdk
 import {
   PersistlyGameSaveStatus,
   PersistlyGameSaves,
-} from "@persistly/sdk";
+} from "@persistlyapp/sdk";
 
 await PersistlyGameSaves.configure({
   runtimeKey: "ps_test_replace_me",
@@ -113,7 +113,7 @@ if (sync.status === PersistlyGameSaveStatus.Conflict) {
 Use `PersistlyClient` directly only when you are building a custom wrapper, migration tool, or advanced integration that needs direct profile/session/runtime control.
 
 ```ts
-import { LocalStorageSaveCache, PersistlyClient } from "@persistly/sdk";
+import { LocalStorageSaveCache, PersistlyClient } from "@persistlyapp/sdk";
 
 const client = new PersistlyClient({
   runtimeKey: process.env.PERSISTLY_RUNTIME_KEY!,

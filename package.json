@@ -1,5 +1,5 @@
 {
-  "name": "@persistly/sdk",
+  "name": "@persistlyapp/sdk",
   "version": "0.10.0",
   "description": "JavaScript SDK for Persistly cloud save sync.",
   "license": "Apache-2.0",
@@ -10,7 +10,7 @@
   "homepage": "https://docs.persistly.app/sdk/javascript",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Persistly/persistly-sdk-js.git"
+    "url": "git+https://github.com/Persistly/persistly-sdk-js.git"
   },
   "bugs": {
     "url": "https://github.com/Persistly/persistly-sdk-js/issues"

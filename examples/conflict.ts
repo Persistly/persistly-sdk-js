@@ -1,4 +1,4 @@
-import { MemorySaveCache, PersistlyClient, PersistlySyncStatus } from "@persistly/sdk";
+import { MemorySaveCache, PersistlyClient, PersistlySyncStatus } from "@persistlyapp/sdk";
 
 const runtimeKey = process.env.PERSISTLY_RUNTIME_KEY;
 

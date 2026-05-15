@@ -1,4 +1,4 @@
-import { PersistlyGameSaveStatus, PersistlyGameSaves } from "@persistly/sdk";
+import { PersistlyGameSaveStatus, PersistlyGameSaves } from "@persistlyapp/sdk";
 
 await PersistlyGameSaves.configure({
   runtimeKey: import.meta.env.VITE_PERSISTLY_RUNTIME_KEY,
