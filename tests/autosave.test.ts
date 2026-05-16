@@ -138,6 +138,58 @@ test("autosave forceSync bypasses interval but respects force cooldown", async (
   assert.equal(syncCalls, 2);
 });
 
+test("autosave preserves local draft when remote sync conflicts", async () => {
+  let now = 0;
+  const draftStore = new MemoryAutosaveDraftStore();
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async () => {
+      return new Response(
+        JSON.stringify({
+          status: "conflict",
+          save: {
+            saveId: "sv_character",
+            playerRef: null,
+            metadata: { characterName: "Cloud" },
+            state: { level: 99 },
+            version: 2,
+            createdAt: "2026-04-09T10:00:00Z",
+            updatedAt: "2026-04-09T10:02:00Z",
+          },
+          details: { reason: "base_version_mismatch" },
+        }),
+        { status: 409, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+  await client.updateLocal({
+    saveId: "sv_character",
+    playerRef: null,
+    metadata: {},
+    state: { level: 1 },
+    version: 1,
+    createdAt: "2026-04-09T10:00:00Z",
+    updatedAt: "2026-04-09T10:00:00Z",
+  });
+  const autosave = new PersistlyAutosaveManager({
+    client,
+    draftStore,
+    syncPolicy,
+    profileSaveId: "sv_profile",
+    characterSaveId: "sv_character",
+    profileSessionToken: "pst_session",
+    now: () => now,
+  });
+
+  const draft = { state: { level: 2 }, metadata: { characterName: "Local" } };
+  await autosave.recordLocalChange(draft);
+  now = 40_000;
+  const result = await autosave.tick();
+
+  assert.equal(result?.status, PersistlySyncStatus.Conflict);
+  assert.deepEqual(await draftStore.get("sv_profile", "sv_character"), draft);
+});
+
 test("LocalStorageAutosaveDraftStore persists drafts across instances", async () => {
   const storage = new MemoryStorage();
   const firstStore = new LocalStorageAutosaveDraftStore({ storage });

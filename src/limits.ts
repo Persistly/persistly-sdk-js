@@ -5,6 +5,12 @@ import runtimeLimitsJson from "../contracts/persistly-contract-v0.3.0/limits/run
 interface RuntimeLimits {
   metadataMaxBytes: number;
   stateMaxBytes: number;
+  planLimits?: Record<string, {
+    accountDataMaxBytes?: number;
+    characterStateMaxBytes?: number;
+    metadataMaxBytes?: number;
+    stateMaxBytes?: number;
+  }>;
   errorCodes: string[];
   conflictReasons: string[];
 }
@@ -43,8 +49,13 @@ function getRuntimeLimits(): RuntimeLimits {
   }
 
   cachedLimits = {
-    metadataMaxBytes: value.metadataMaxBytes,
-    stateMaxBytes: value.stateMaxBytes,
+    metadataMaxBytes: maxPlanLimit(value, "metadataMaxBytes", value.metadataMaxBytes),
+    stateMaxBytes: Math.max(
+      maxPlanLimit(value, "stateMaxBytes", value.stateMaxBytes),
+      maxPlanLimit(value, "accountDataMaxBytes", value.stateMaxBytes),
+      maxPlanLimit(value, "characterStateMaxBytes", value.stateMaxBytes),
+    ),
+    ...(isPlanLimits(value.planLimits) ? { planLimits: value.planLimits } : {}),
     errorCodes: value.errorCodes,
     conflictReasons: value.conflictReasons,
   };
@@ -54,7 +65,7 @@ function getRuntimeLimits(): RuntimeLimits {
 
 function assertWithinLimit(field: "metadata" | "state", payload: JsonObject, maxBytes: number): void {
   const serialized = JSON.stringify(payload);
-  const size = Buffer.byteLength(serialized, "utf8");
+  const size = utf8ByteLength(serialized);
 
   if (size > maxBytes) {
     throw new PersistlyPayloadTooLargeError(
@@ -65,4 +76,31 @@ function assertWithinLimit(field: "metadata" | "state", payload: JsonObject, max
       },
     );
   }
+}
+
+function maxPlanLimit(value: Partial<RuntimeLimits>, field: string, fallback: number): number {
+  if (!isPlanLimits(value.planLimits)) {
+    return fallback;
+  }
+
+  let maxBytes = fallback;
+  for (const plan of Object.values(value.planLimits)) {
+    const candidate = plan[field as keyof typeof plan];
+    if (typeof candidate === "number" && Number.isFinite(candidate) && candidate > maxBytes) {
+      maxBytes = candidate;
+    }
+  }
+  return maxBytes;
+}
+
+function isPlanLimits(value: unknown): value is NonNullable<RuntimeLimits["planLimits"]> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function utf8ByteLength(value: string): number {
+  if (typeof TextEncoder !== "undefined") {
+    return new TextEncoder().encode(value).byteLength;
+  }
+
+  return value.length;
 }

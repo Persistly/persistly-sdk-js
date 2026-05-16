@@ -24,6 +24,14 @@ function createJsonResponse(status: number, payload: unknown): Response {
   });
 }
 
+function fakeJsonResponse(status: number, payload: unknown): Response {
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    text: async () => JSON.stringify(payload),
+  } as Response;
+}
+
 test("createSave posts the contract payload and caches the canonical save", async () => {
   const cache = new MemorySaveCache();
   const expected: SaveEnvelope = {
@@ -61,7 +69,7 @@ test("createSave posts the contract payload and caches the canonical save", asyn
   const headers = new Headers(requests[0]?.init?.headers);
   assert.match(String(headers.get("authorization")), /^Bearer ps_test_runtime$/);
   assert.equal(headers.get("x-persistly-sdk"), "javascript");
-  assert.equal(headers.get("x-persistly-sdk-version"), "0.10.0");
+  assert.equal(headers.get("x-persistly-sdk-version"), "0.10.1");
   assert.ok(headers.get("x-persistly-platform"));
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
     playerRef: "player-184",
@@ -95,6 +103,34 @@ test("createSave defaults to the public Persistly API origin when no base URL is
   });
 
   assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/saves`);
+});
+
+test("createSave payload validation does not require Node Buffer", async () => {
+  const globalWithBuffer = globalThis as typeof globalThis & { Buffer?: unknown };
+  const originalBuffer = globalWithBuffer.Buffer;
+  globalWithBuffer.Buffer = undefined;
+  try {
+    const client = new PersistlyClient({
+      runtimeKey: "ps_test_runtime",
+      fetch: async () => fakeJsonResponse(201, {
+        save: {
+          saveId: "sv_browser_payload",
+          playerRef: null,
+          metadata: {},
+          state: { level: 1 },
+          version: 1,
+          createdAt: "2026-04-09T10:00:00Z",
+          updatedAt: "2026-04-09T10:00:00Z",
+        },
+      }),
+    });
+
+    const save = await client.createSave({ state: { level: 1 } });
+
+    assert.equal(save.saveId, "sv_browser_payload");
+  } finally {
+    globalWithBuffer.Buffer = originalBuffer;
+  }
 });
 
 test("createSave ignores legacy baseUrl overrides and still uses the public Persistly API origin", async () => {
@@ -412,13 +448,13 @@ test("createSave enforces pinned payload limits before any runtime call", async 
       client.createSave({
         metadata: {},
         state: {
-          blob: "x".repeat(262144),
+          blob: "x".repeat(2097152),
         },
       }),
     (error: unknown) => {
       assert.ok(error instanceof PersistlyPayloadTooLargeError);
       assert.equal(error.code, "payload_too_large");
-      assert.deepEqual(error.details, { field: "state", maxBytes: 262144 });
+      assert.deepEqual(error.details, { field: "state", maxBytes: 2097152 });
       assert.equal(fetchCalls, 0);
       return true;
     },

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.1
+
+- Fixes browser payload validation so the SDK does not require Node `Buffer`.
+- Fixes exported profile declaration types for strict TypeScript consumers.
+- Preserves autosave drafts when remote sync returns a conflict.
+- Adds a package-consumer smoke check for packed npm artifacts.
+
 ## 0.10.0
 
 - Renames the npm package to `@persistlyapp/sdk`.

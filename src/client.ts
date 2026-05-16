@@ -156,7 +156,7 @@ export interface PersistlyClientOptions {
 }
 
 export const DEFAULT_PERSISTLY_API_BASE_URL = "https://api.persistly.app";
-export const PERSISTLY_JS_SDK_VERSION = "0.10.0";
+export const PERSISTLY_JS_SDK_VERSION = "0.10.1";
 
 export class PersistlyClient {
   private readonly baseUrl: string;

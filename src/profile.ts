@@ -2,19 +2,19 @@ import { parseObject, parseSaveSnapshot, type JsonObject, type SaveSnapshot } fr
 
 export const PersistlyProfileSchema = "persistly.profile.v1" as const;
 
-export interface PersistlyProfileCharacter extends JsonObject {
+export type PersistlyProfileCharacter = JsonObject & {
   slotKey: string;
   characterSaveId: string;
   metadata: JsonObject;
   archived?: boolean;
   archivedAt?: string;
-}
+};
 
-export interface PersistlyProfileState extends JsonObject {
+export type PersistlyProfileState = JsonObject & {
   schema: typeof PersistlyProfileSchema;
   accountData: JsonObject;
   characterSlots: PersistlyProfileCharacter[];
-}
+};
 
 export interface BuildProfileStateInput {
   accountData?: JsonObject;

@@ -1,4 +1,4 @@
-import type { PersistlyClient, SyncPolicy, SyncSaveResult } from "./client.js";
+import { PersistlySyncStatus, type PersistlyClient, type SyncPolicy, type SyncSaveResult } from "./client.js";
 import type { LocalStorageLike } from "./local-storage-cache.js";
 import type { JsonObject } from "./schema.js";
 
@@ -137,7 +137,9 @@ export class PersistlyAutosaveManager {
       ...(draft.metadata === undefined ? {} : { metadata: draft.metadata }),
       state: draft.state,
     });
-    await this.draftStore.clear(this.profileSaveId, this.characterSaveId);
+    if (result.status === PersistlySyncStatus.Accepted) {
+      await this.draftStore.clear(this.profileSaveId, this.characterSaveId);
+    }
     this.lastRemoteSyncAt = this.now();
     return result;
   }

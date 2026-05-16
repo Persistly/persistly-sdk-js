@@ -1,6 +1,6 @@
 {
   "name": "@persistlyapp/sdk",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "JavaScript SDK for Persistly cloud save sync.",
   "license": "Apache-2.0",
   "type": "module",
@@ -78,8 +78,9 @@
     "build": "tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --import tsx --test \"tests/*.test.ts\"",
+    "test:package": "pnpm build && node scripts/package-consumer-smoke.mjs",
     "validate:contract": "node scripts/validate-contract.mjs",
-    "prepack": "pnpm validate:contract && pnpm test && pnpm build",
+    "prepack": "pnpm validate:contract && pnpm test && pnpm build && node scripts/package-consumer-smoke.mjs",
     "example:basic": "tsx examples/basic.ts",
     "example:conflict": "tsx examples/conflict.ts"
   },
