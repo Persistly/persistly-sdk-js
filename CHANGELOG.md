@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.2
+
+- Recovers automatically when a remote slot already exists but local SDK state has lost the `characterSaveId`.
+- Reconciles the remote profile slot reference, loads the canonical character save, and retries slot sync instead of surfacing a terminal `slot_already_exists` error.
+
 ## 0.10.1
 
 - Fixes browser payload validation so the SDK does not require Node `Buffer`.

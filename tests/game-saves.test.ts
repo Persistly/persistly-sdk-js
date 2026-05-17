@@ -330,6 +330,99 @@ test("restored profile session loads real profile before sync operations", async
   ]);
 });
 
+test("slot_already_exists reconciles remote character identity and retries sync", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const persistly = await PersistlyGameSaves.start({
+    runtimeKey: "ps_test_example",
+    storage: "memory",
+    profileSaveId: "sv_profile",
+    profileSessionToken: "pst_session",
+    fetch: async (input, init) => {
+      const url = String(input);
+      requests.push({ url, init });
+
+      if (url.endsWith("/profiles/sv_profile")) {
+        const { syncPolicy: _syncPolicy, ...envelope } = createProfileEnvelope();
+        return createJsonResponse(200, {
+          ...envelope,
+          profileSessionToken: undefined,
+          profile: createSave("sv_profile", {
+            schema: "persistly.profile.v1",
+            accountData: { diamonds: 777 },
+            characterSlots: [
+              {
+                slotKey: "autosave",
+                characterSaveId: "sv_existing_character",
+                metadata: { _persistly: { slotKey: "autosave" }, characterName: "Ayla" },
+              },
+            ],
+          }, 8, { profileLabel: "Cloud" }),
+        });
+      }
+
+      if (url.endsWith("/runtime-config")) {
+        return createJsonResponse(200, {
+          syncPolicy: {
+            minRemoteSyncIntervalSeconds: 120,
+            forceSyncCooldownSeconds: 30,
+            syncOnAppBackground: true,
+            syncOnAppForeground: true,
+            syncOnReconnect: true,
+            maxQueuedLocalSnapshots: 10,
+          },
+        });
+      }
+
+      if (url.endsWith("/profiles/sv_profile/characters")) {
+        return createJsonResponse(409, {
+          error: {
+            code: "slot_already_exists",
+            message: "An active character already exists for this slot key.",
+          },
+        });
+      }
+
+      if (url.endsWith("/profiles/sv_profile/characters/sv_existing_character")) {
+        return createJsonResponse(200, {
+          save: createSave("sv_existing_character", { level: 7, checkpoint: "cloud" }, 3, {
+            _persistly: { slotKey: "autosave" },
+            characterName: "Ayla",
+          }),
+        });
+      }
+
+      if (url.endsWith("/profiles/sv_profile/characters/sv_existing_character/sync")) {
+        return createJsonResponse(200, {
+          status: PersistlySyncStatus.Accepted,
+          version: 4,
+          updatedAt: "2026-04-10T00:12:00Z",
+          historyRetained: false,
+        });
+      }
+
+      throw new Error(`unexpected url ${url}`);
+    },
+  });
+
+  await persistly.saveSlot("autosave", { level: 8, checkpoint: "local" }, { metadata: { characterName: "Ayla" } });
+  const result = await persistly.forceSync("autosave", { bypassCooldown: true });
+  const inspected = await persistly.inspectSlot("autosave");
+
+  assert.equal(result.status, PersistlyGameSaveStatus.Synced);
+  assert.equal(result.target, PersistlyGameSaveTarget.Slot);
+  assert.equal(inspected.characterSaveId, "sv_existing_character");
+  assert.equal(inspected.version, 4);
+  assert.equal(inspected.dirty, false);
+  assert.deepEqual(requests.map((request) => request.url), [
+    `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/profiles/sv_profile`,
+    `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/runtime-config`,
+    `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/profiles/sv_profile/characters`,
+    `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/profiles/sv_profile`,
+    `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/profiles/sv_profile/characters/sv_existing_character`,
+    `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/profiles/sv_profile/characters/sv_existing_character/sync`,
+  ]);
+});
+
 test("account-data writes are local-first and forceSyncProfile syncs profile account data", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const persistly = await PersistlyGameSaves.start({

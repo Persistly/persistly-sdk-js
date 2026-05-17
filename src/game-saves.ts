@@ -9,6 +9,7 @@ import {
   PersistlyApiError,
   PersistlyConfigurationError,
   PersistlyRateLimitedError,
+  PersistlySlotAlreadyExistsError,
   PersistlyStorageError,
   PersistlyTransportError,
 } from "./errors.js";
@@ -778,19 +779,27 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       profile = await this.loadRemoteProfile(profile);
     }
 
-    const envelope = await this.client.createProfileCharacter({
-      profileSaveId,
-      profileSessionToken,
-      metadata: remoteSlotMetadata(slot.slotKey, slot.metadata),
-      state: slot.state,
-    });
-    await this.store.setProfile({
-      ...profileFromSave(envelope.profile, profileSessionToken, profile.syncPolicy),
-      dirty: false,
-      lastRemoteSyncedAt: this.now(),
-    });
-    await this.store.setSlot(slotFromSave(slot.slotKey, envelope.character, slot.state, slot.metadata, this.now()));
-    return { status: PersistlyGameSaveStatus.Synced, target: PersistlyGameSaveTarget.Slot, slotKey: slot.slotKey, save: envelope.character };
+    try {
+      const envelope = await this.client.createProfileCharacter({
+        profileSaveId,
+        profileSessionToken,
+        metadata: remoteSlotMetadata(slot.slotKey, slot.metadata),
+        state: slot.state,
+      });
+      await this.store.setProfile({
+        ...profileFromSave(envelope.profile, profileSessionToken, profile.syncPolicy),
+        dirty: false,
+        lastRemoteSyncedAt: this.now(),
+      });
+      await this.store.setSlot(slotFromSave(slot.slotKey, envelope.character, slot.state, slot.metadata, this.now()));
+      return { status: PersistlyGameSaveStatus.Synced, target: PersistlyGameSaveTarget.Slot, slotKey: slot.slotKey, save: envelope.character };
+    } catch (error) {
+      if (!(error instanceof PersistlySlotAlreadyExistsError)) {
+        throw error;
+      }
+      const reconciled = await this.reconcileExistingRemoteSlot(slot, profileSaveId, profileSessionToken, profile.syncPolicy);
+      return await this.syncExistingCharacter(reconciled);
+    }
   }
 
   private async syncExistingCharacter(slot: SlotRecord): Promise<PersistlyGameSaveSyncResult> {
@@ -927,6 +936,46 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     }
     throw error;
   }
+
+  private async reconcileExistingRemoteSlot(
+    slot: SlotRecord,
+    profileSaveId: string,
+    profileSessionToken: string,
+    syncPolicy: SyncPolicy | undefined,
+  ): Promise<SlotRecord> {
+    const envelope = await this.client.loadProfileEnvelope({
+      profileSaveId,
+      profileSessionToken,
+    });
+    const nextProfile = profileFromSave(envelope.profile, profileSessionToken, envelope.syncPolicy ?? syncPolicy);
+    await this.store.setProfile({ ...nextProfile, dirty: false, lastRemoteSyncedAt: this.now() });
+
+    const remoteSlot = findRemoteCharacterSlot(nextProfile.characterSlots, slot.slotKey);
+    if (!remoteSlot?.characterSaveId) {
+      throw new PersistlyConfigurationError(
+        `Remote profile reported slot_already_exists for ${slot.slotKey} but did not expose a matching characterSaveId.`,
+      );
+    }
+
+    const remoteCharacter = await this.client.loadProfileCharacter({
+      profileSaveId,
+      profileSessionToken,
+      characterSaveId: remoteSlot.characterSaveId,
+    });
+
+    const reconciled: SlotRecord = {
+      ...slot,
+      characterSaveId: remoteCharacter.saveId,
+      version: remoteCharacter.version,
+      cloudState: clone(remoteCharacter.state),
+      cloudMetadata: clone(remoteCharacter.metadata),
+      cloudVersion: remoteCharacter.version,
+      archived: false,
+      ...(slot.lastRemoteSyncedAt === undefined ? {} : { lastRemoteSyncedAt: slot.lastRemoteSyncedAt }),
+    };
+    await this.store.setSlot(reconciled);
+    return reconciled;
+  }
 }
 
 export class PersistlyGameSaves {
@@ -1020,6 +1069,20 @@ function readProfileState(save: Save): { accountData: JsonObject; characterSlots
     accountData: parseObject(state.accountData, "profile.state.accountData"),
     characterSlots: characterSlots.map((slot, index) => parseObject(slot, `profile.state.characterSlots[${index}]`)),
   };
+}
+
+function findRemoteCharacterSlot(
+  characterSlots: JsonObject[],
+  slotKey: string,
+): { slotKey: string; characterSaveId?: string } | undefined {
+  for (const slot of characterSlots) {
+    if (slot.slotKey !== slotKey) {
+      continue;
+    }
+    const characterSaveId = typeof slot.characterSaveId === "string" ? slot.characterSaveId : undefined;
+    return { slotKey, ...(characterSaveId === undefined ? {} : { characterSaveId }) };
+  }
+  return undefined;
 }
 
 function slotFromSave(
