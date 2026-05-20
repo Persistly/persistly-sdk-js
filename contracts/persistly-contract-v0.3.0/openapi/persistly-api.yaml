@@ -108,9 +108,17 @@ paths:
       operationId: getRuntimeConfig
       tags: [Profiles]
       summary: Get runtime config
-      description: Return SDK runtime configuration such as dashboard-controlled sync policy.
+      description: Return SDK runtime configuration such as dashboard-controlled sync policy and the active environment game config.
       security:
         - RuntimeKey: []
+      parameters:
+        - name: gameConfigVersion
+          in: query
+          required: false
+          description: Client's cached active game config version. When it matches, the response omits the config payload and marks it unchanged.
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
           description: Runtime configuration
@@ -173,6 +181,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProfileEnvelopeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    delete:
+      operationId: deleteProfile
+      tags: [Profiles]
+      summary: Delete profile
+      description: Permanently delete a profile, revoke its profile sessions, and erase all attached character slots. Repeat requests from the same deleted session return alreadyDeleted.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/ProfileSaveId'
+        - $ref: '#/components/parameters/ProfileSession'
+      responses:
+        '200':
+          description: Profile deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteProfileResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -284,6 +319,34 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    delete:
+      operationId: deleteProfileCharacter
+      tags: [Profiles]
+      summary: Delete profile character
+      description: Permanently delete a character slot under a profile. This removes the slot ref from profile.state.characterSlots and erases the character save lineage. Archived characters may also be deleted.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/ProfileSaveId'
+        - $ref: '#/components/parameters/CharacterSaveId'
+        - $ref: '#/components/parameters/ProfileSession'
+      responses:
+        '200':
+          description: Character deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteCharacterResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -336,6 +399,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '410':
+          $ref: '#/components/responses/Gone'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
         '429':
@@ -649,6 +714,33 @@ components:
       properties:
         syncPolicy:
           $ref: '#/components/schemas/SyncPolicy'
+        gameConfig:
+          $ref: '#/components/schemas/GameConfig'
+    GameConfig:
+      type: object
+      required: [enabled, version, sizeBytes]
+      properties:
+        enabled:
+          type: boolean
+          description: False when no game config is currently active for this environment.
+        unchanged:
+          type: boolean
+          description: True when gameConfigVersion matches the active config and the data payload is omitted.
+        version:
+          type: integer
+          minimum: 0
+        checksum:
+          type: string
+        sizeBytes:
+          type: integer
+          minimum: 0
+        publishedAt:
+          type: string
+          format: date-time
+        data:
+          type: object
+          description: Dashboard-published game config. Omitted when unchanged or disabled.
+          additionalProperties: true
     PersistlyProfileState:
       type: object
       required: [schema, accountData, characterSlots]
@@ -788,6 +880,42 @@ components:
       properties:
         save:
           $ref: '#/components/schemas/Save'
+    DeleteCharacterResponse:
+      type: object
+      required: [profileSaveId, characterSaveId, deletedAt, alreadyDeleted, cleanupQueued]
+      properties:
+        profileSaveId:
+          type: string
+        characterSaveId:
+          type: string
+        slotKey:
+          type: string
+        deletedAt:
+          type: string
+          format: date-time
+        alreadyDeleted:
+          type: boolean
+        cleanupQueued:
+          type: boolean
+        profile:
+          $ref: '#/components/schemas/Save'
+          description: Updated profile save after slot removal. Present for first successful delete.
+    DeleteProfileResponse:
+      type: object
+      required: [profileSaveId, deletedAt, deletedCharacterCount, alreadyDeleted, cleanupQueued]
+      properties:
+        profileSaveId:
+          type: string
+        deletedAt:
+          type: string
+          format: date-time
+        deletedCharacterCount:
+          type: integer
+          minimum: 0
+        alreadyDeleted:
+          type: boolean
+        cleanupQueued:
+          type: boolean
     SaveOperationResponse:
       type: object
       required: [status]
@@ -862,7 +990,7 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, character_archived, rate_limited, payload_too_large, server_error]
+              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, character_archived, profile_deleted, character_deleted, rate_limited, monthly_quota_exceeded, payload_too_large, server_error]
             message:
               type: string
             details:
@@ -921,6 +1049,29 @@ components:
                 error:
                   code: forbidden
                   message: Profile session cannot access this resource.
+    Gone:
+      description: Deleted resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            profileDeleted:
+              summary: Profile was deleted
+              value:
+                error:
+                  code: profile_deleted
+                  message: Profile was deleted.
+                  details:
+                    profileSaveId: sv_profile
+            characterDeleted:
+              summary: Character was deleted
+              value:
+                error:
+                  code: character_deleted
+                  message: Character was deleted.
+                  details:
+                    characterSaveId: sv_character
     SlotAlreadyExists:
       description: Character slot already exists
       content:

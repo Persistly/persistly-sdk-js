@@ -6,6 +6,8 @@ export type PersistlyErrorCode =
   | "conflict"
   | "slot_already_exists"
   | "character_archived"
+  | "profile_deleted"
+  | "character_deleted"
   | "rate_limited"
   | "payload_too_large"
   | "server_error";
@@ -68,6 +70,20 @@ export class PersistlyCharacterArchivedError extends PersistlyApiError {
   constructor(message: string, details?: Record<string, unknown>, status = 409) {
     super(status, "character_archived", message, details);
     this.name = "PersistlyCharacterArchivedError";
+  }
+}
+
+export class PersistlyProfileDeletedError extends PersistlyApiError {
+  constructor(message: string, details?: Record<string, unknown>, status = 410) {
+    super(status, "profile_deleted", message, details);
+    this.name = "PersistlyProfileDeletedError";
+  }
+}
+
+export class PersistlyCharacterDeletedError extends PersistlyApiError {
+  constructor(message: string, details?: Record<string, unknown>, status = 410) {
+    super(status, "character_deleted", message, details);
+    this.name = "PersistlyCharacterDeletedError";
   }
 }
 
@@ -142,6 +158,10 @@ export function createPersistlyApiError(
       return new PersistlySlotAlreadyExistsError(message, details, status);
     case "character_archived":
       return new PersistlyCharacterArchivedError(message, details, status);
+    case "profile_deleted":
+      return new PersistlyProfileDeletedError(message, details, status);
+    case "character_deleted":
+      return new PersistlyCharacterDeletedError(message, details, status);
     case "rate_limited":
       return new PersistlyRateLimitedError(message, details, status);
     case "payload_too_large":

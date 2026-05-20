@@ -32,6 +32,20 @@ function fakeJsonResponse(status: number, payload: unknown): Response {
   } as Response;
 }
 
+function createSave(saveId: string, state: Record<string, unknown>, version = 1, metadata: Record<string, unknown> = {}) {
+  return {
+    save: {
+      saveId,
+      playerRef: "player-184",
+      metadata,
+      state,
+      version,
+      createdAt: "2026-04-09T10:00:00Z",
+      updatedAt: "2026-04-09T10:00:00Z",
+    },
+  };
+}
+
 test("createSave posts the contract payload and caches the canonical save", async () => {
   const cache = new MemorySaveCache();
   const expected: SaveEnvelope = {
@@ -818,6 +832,72 @@ test("archiveProfileCharacter posts archive route and caches returned profile", 
 
   assert.equal(envelope.profile.state.characterSlots[0]?.archived, true);
   assert.deepEqual(await cache.get("sv_profile"), envelope.profile);
+});
+
+test("deleteProfileCharacter posts delete route, clears character cache, and updates profile cache", async () => {
+  const cache = new MemorySaveCache();
+  await cache.set(createSave("sv_character", { level: 1 }, 1, { _persistly: { slotKey: "autosave" } }).save);
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    cache,
+    fetch: async () =>
+      createJsonResponse(200, {
+        profileSaveId: "sv_profile",
+        characterSaveId: "sv_character",
+        slotKey: "autosave",
+        deletedAt: "2026-04-09T10:10:00Z",
+        alreadyDeleted: false,
+        cleanupQueued: true,
+        profile: {
+          saveId: "sv_profile",
+          playerRef: "player-184",
+          metadata: {},
+          state: {
+            schema: "persistly.profile.v1",
+            accountData: {},
+            characterSlots: [],
+          },
+          version: 3,
+          createdAt: "2026-04-09T10:00:00Z",
+          updatedAt: "2026-04-09T10:10:00Z",
+        },
+      }),
+  });
+
+  const result = await client.deleteProfileCharacter({
+    profileSaveId: "sv_profile",
+    profileSessionToken: "pst_session",
+    characterSaveId: "sv_character",
+  });
+
+  assert.equal(result.characterSaveId, "sv_character");
+  assert.equal(await cache.get("sv_character"), null);
+  assert.deepEqual(await cache.get("sv_profile"), result.profile);
+});
+
+test("deleteProfile posts delete route and clears profile cache", async () => {
+  const cache = new MemorySaveCache();
+  await cache.set(createSave("sv_profile", { schema: "persistly.profile.v1", accountData: {}, characterSlots: [] }).save);
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    cache,
+    fetch: async () =>
+      createJsonResponse(200, {
+        profileSaveId: "sv_profile",
+        deletedAt: "2026-04-09T10:10:00Z",
+        deletedCharacterCount: 2,
+        alreadyDeleted: false,
+        cleanupQueued: true,
+      }),
+  });
+
+  const result = await client.deleteProfile({
+    profileSaveId: "sv_profile",
+    profileSessionToken: "pst_session",
+  });
+
+  assert.equal(result.deletedCharacterCount, 2);
+  assert.equal(await cache.get("sv_profile"), null);
 });
 
 test("duplicate slot and archived character errors are typed", async () => {

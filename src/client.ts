@@ -91,6 +91,24 @@ export interface ProfileCharacterEnvelope extends ProfileEnvelope {
   character: Save;
 }
 
+export interface DeleteProfileResult {
+  profileSaveId: string;
+  deletedAt: string;
+  deletedCharacterCount: number;
+  alreadyDeleted: boolean;
+  cleanupQueued: boolean;
+}
+
+export interface DeleteProfileCharacterResult {
+  profileSaveId: string;
+  characterSaveId: string;
+  deletedAt: string;
+  alreadyDeleted: boolean;
+  cleanupQueued: boolean;
+  slotKey?: string;
+  profile?: Save;
+}
+
 export interface ProfileSessionInput {
   profileSaveId: string;
   profileSessionToken: string;
@@ -304,6 +322,18 @@ export class PersistlyClient {
     return envelope;
   }
 
+  async deleteProfile(payload: ProfileSessionInput): Promise<DeleteProfileResult> {
+    assertSaveId(payload.profileSaveId, "deleteProfile");
+    assertProfileSessionToken(payload.profileSessionToken, "deleteProfile");
+    const response = await this.requestJson(`/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}`, {
+      method: "DELETE",
+      headers: profileSessionHeaders(payload.profileSessionToken),
+    });
+    const result = parseDeleteProfileResult(response);
+    await this.cache.clear(payload.profileSaveId);
+    return result;
+  }
+
   async createProfileCharacter(payload: CreateProfileCharacterInput): Promise<ProfileCharacterEnvelope> {
     assertSaveId(payload.profileSaveId, "createProfileCharacter");
     assertProfileSessionToken(payload.profileSessionToken, "createProfileCharacter");
@@ -341,6 +371,25 @@ export class PersistlyClient {
 
     await this.cache.set(save);
     return save;
+  }
+
+  async deleteProfileCharacter(payload: ProfileCharacterInput): Promise<DeleteProfileCharacterResult> {
+    assertSaveId(payload.profileSaveId, "deleteProfileCharacter");
+    assertSaveId(payload.characterSaveId, "deleteProfileCharacter");
+    assertProfileSessionToken(payload.profileSessionToken, "deleteProfileCharacter");
+    const response = await this.requestJson(
+      `/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}/characters/${encodeURIComponent(payload.characterSaveId)}`,
+      {
+        method: "DELETE",
+        headers: profileSessionHeaders(payload.profileSessionToken),
+      },
+    );
+    const result = parseDeleteProfileCharacterResult(response);
+    await this.cache.clear(payload.characterSaveId);
+    if (result.profile) {
+      await this.cache.set(result.profile);
+    }
+    return result;
   }
 
   async syncProfileCharacter(payload: SyncProfileCharacterInput): Promise<SyncSaveResult> {
@@ -629,6 +678,60 @@ function parseSaveEnvelope(value: unknown): SaveEnvelope {
 
   return {
     save: parseSave(record.save),
+  };
+}
+
+function parseDeleteProfileResult(value: unknown): DeleteProfileResult {
+  const record = parseObject(value, "Delete profile response");
+  if (typeof record.profileSaveId !== "string" || record.profileSaveId.trim() === "") {
+    throw new PersistlyConfigurationError("Delete profile response profileSaveId must be a non-empty string.");
+  }
+  if (typeof record.deletedAt !== "string" || Number.isNaN(Date.parse(record.deletedAt))) {
+    throw new PersistlyConfigurationError("Delete profile response deletedAt must be a valid date-time string.");
+  }
+  if (typeof record.deletedCharacterCount !== "number" || !Number.isInteger(record.deletedCharacterCount) || record.deletedCharacterCount < 0) {
+    throw new PersistlyConfigurationError("Delete profile response deletedCharacterCount must be a non-negative integer.");
+  }
+  if (typeof record.alreadyDeleted !== "boolean") {
+    throw new PersistlyConfigurationError("Delete profile response alreadyDeleted must be a boolean.");
+  }
+  if (typeof record.cleanupQueued !== "boolean") {
+    throw new PersistlyConfigurationError("Delete profile response cleanupQueued must be a boolean.");
+  }
+  return {
+    profileSaveId: record.profileSaveId,
+    deletedAt: record.deletedAt,
+    deletedCharacterCount: record.deletedCharacterCount,
+    alreadyDeleted: record.alreadyDeleted,
+    cleanupQueued: record.cleanupQueued,
+  };
+}
+
+function parseDeleteProfileCharacterResult(value: unknown): DeleteProfileCharacterResult {
+  const record = parseObject(value, "Delete profile character response");
+  if (typeof record.profileSaveId !== "string" || record.profileSaveId.trim() === "") {
+    throw new PersistlyConfigurationError("Delete profile character response profileSaveId must be a non-empty string.");
+  }
+  if (typeof record.characterSaveId !== "string" || record.characterSaveId.trim() === "") {
+    throw new PersistlyConfigurationError("Delete profile character response characterSaveId must be a non-empty string.");
+  }
+  if (typeof record.deletedAt !== "string" || Number.isNaN(Date.parse(record.deletedAt))) {
+    throw new PersistlyConfigurationError("Delete profile character response deletedAt must be a valid date-time string.");
+  }
+  if (typeof record.alreadyDeleted !== "boolean") {
+    throw new PersistlyConfigurationError("Delete profile character response alreadyDeleted must be a boolean.");
+  }
+  if (typeof record.cleanupQueued !== "boolean") {
+    throw new PersistlyConfigurationError("Delete profile character response cleanupQueued must be a boolean.");
+  }
+  return {
+    profileSaveId: record.profileSaveId,
+    characterSaveId: record.characterSaveId,
+    ...(typeof record.slotKey === "string" ? { slotKey: record.slotKey } : {}),
+    deletedAt: record.deletedAt,
+    alreadyDeleted: record.alreadyDeleted,
+    cleanupQueued: record.cleanupQueued,
+    ...(record.profile === undefined ? {} : { profile: parseSave(record.profile) }),
   };
 }
 
@@ -994,6 +1097,8 @@ function isPersistlyErrorCode(value: unknown): value is PersistlyErrorCode {
     value === "conflict" ||
     value === "slot_already_exists" ||
     value === "character_archived" ||
+    value === "profile_deleted" ||
+    value === "character_deleted" ||
     value === "rate_limited" ||
     value === "payload_too_large" ||
     value === "server_error"

@@ -71,6 +71,11 @@ export interface PersistlyProfileSession {
   profileSessionToken?: string;
 }
 
+export interface PersistlyAttachProfileOptions {
+  profileSaveId: string;
+  profileSessionToken: string;
+}
+
 export interface PersistlyEnsureProfileResult {
   status: typeof PersistlyGameSaveStatus.Synced | typeof PersistlyGameSaveStatus.LocalFound;
   target: typeof PersistlyGameSaveTarget.Profile;
@@ -91,6 +96,21 @@ export interface PersistlySlotInspection {
   lastCloudState?: JsonObject;
   lastCloudMetadata?: JsonObject;
   lastLocalSavedAt?: string;
+  lastRemoteSyncedAt?: string;
+}
+
+export interface PersistlyProfileInspection {
+  status: typeof PersistlyGameSaveStatus.LocalFound | typeof PersistlyGameSaveStatus.NotFound;
+  target: typeof PersistlyGameSaveTarget.Profile;
+  profileSaveId?: string;
+  metadata?: JsonObject;
+  accountData?: JsonObject;
+  characterSlots?: JsonObject[];
+  version?: number;
+  dirty: boolean;
+  lastCloudAccountData?: JsonObject;
+  lastCloudMetadata?: JsonObject;
+  cloudVersion?: number;
   lastRemoteSyncedAt?: string;
 }
 
@@ -179,6 +199,7 @@ interface SlotRecord {
 interface GameSavesStore {
   getProfile(): Promise<ProfileRecord | undefined>;
   setProfile(profile: ProfileRecord): Promise<void>;
+  deleteProfile(): Promise<void>;
   getSlot(slotKey: string): Promise<SlotRecord | undefined>;
   setSlot(slot: SlotRecord): Promise<void>;
   deleteSlot(slotKey: string): Promise<void>;
@@ -186,8 +207,12 @@ interface GameSavesStore {
 }
 
 interface PersistlyGameSavesFacade {
+  createProfile(): Promise<PersistlyEnsureProfileResult>;
+  attachProfile(options: PersistlyAttachProfileOptions): Promise<PersistlyEnsureProfileResult>;
   ensureProfile(): Promise<PersistlyEnsureProfileResult>;
   getProfileSession(options?: { includeToken?: boolean }): Promise<PersistlyProfileSession>;
+  inspectProfile(): Promise<PersistlyProfileInspection>;
+  getAccountData(): Promise<JsonObject>;
   saveAccountData(accountData: JsonObject): Promise<PersistlyGameSaveSyncResult>;
   patchAccountData(accountDataPatch: JsonObject): Promise<PersistlyGameSaveSyncResult>;
   forceSyncProfile(options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult>;
@@ -196,10 +221,14 @@ interface PersistlyGameSavesFacade {
   saveSlot(slotKey: string, state: JsonObject, options?: PersistlyGameSavesSaveSlotOptions): Promise<PersistlyGameSaveSyncResult>;
   listSlots(options?: { includeArchived?: boolean }): Promise<PersistlySlotInspection[]>;
   inspectSlot(slotKey: string): Promise<PersistlySlotInspection>;
+  refreshSlot(slotKey: string): Promise<PersistlyGameSaveSyncResult>;
   forceSync(slotKey: string, options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult>;
   syncDueSlots(options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult[]>;
   syncDue(options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult[]>;
   archiveSlot(slotKey: string): Promise<PersistlyGameSaveSyncResult>;
+  deleteProfile(): Promise<PersistlyGameSaveSyncResult>;
+  deleteSlot(slotKey: string): Promise<PersistlyGameSaveSyncResult>;
+  clearLocalProfile(): Promise<PersistlyGameSaveSyncResult>;
   clearLocalSlot(slotKey: string): Promise<PersistlyGameSaveSyncResult>;
   acceptCloudVersion(slotKey: string): Promise<PersistlyGameSaveSyncResult>;
   overwriteCloudVersion(slotKey: string, options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult>;
@@ -216,6 +245,10 @@ class MemoryGameSavesStore implements GameSavesStore {
 
   async setProfile(profile: ProfileRecord): Promise<void> {
     this.profile = clone(profile);
+  }
+
+  async deleteProfile(): Promise<void> {
+    this.profile = undefined;
   }
 
   async getSlot(slotKey: string): Promise<SlotRecord | undefined> {
@@ -258,6 +291,10 @@ class LocalStorageGameSavesStore implements GameSavesStore {
 
   async setProfile(profile: ProfileRecord): Promise<void> {
     this.storage.setItem(this.profileKey(), JSON.stringify(profile));
+  }
+
+  async deleteProfile(): Promise<void> {
+    this.storage.removeItem(this.profileKey());
   }
 
   async getSlot(slotKey: string): Promise<SlotRecord | undefined> {
@@ -306,11 +343,27 @@ class LocalStorageGameSavesStore implements GameSavesStore {
 }
 
 class UnconfiguredPersistlyGameSaves implements PersistlyGameSavesFacade {
+  async createProfile(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async attachProfile(): Promise<never> {
+    throwNotConfigured();
+  }
+
   async ensureProfile(): Promise<never> {
     throwNotConfigured();
   }
 
   async getProfileSession(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async inspectProfile(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async getAccountData(): Promise<never> {
     throwNotConfigured();
   }
 
@@ -346,6 +399,10 @@ class UnconfiguredPersistlyGameSaves implements PersistlyGameSavesFacade {
     throwNotConfigured();
   }
 
+  async refreshSlot(): Promise<never> {
+    throwNotConfigured();
+  }
+
   async forceSync(): Promise<never> {
     throwNotConfigured();
   }
@@ -359,6 +416,18 @@ class UnconfiguredPersistlyGameSaves implements PersistlyGameSavesFacade {
   }
 
   async archiveSlot(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async deleteProfile(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async deleteSlot(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async clearLocalProfile(): Promise<never> {
     throwNotConfigured();
   }
 
@@ -384,6 +453,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
   private readonly config: PersistlyGameSavesConfig;
   private readonly store: GameSavesStore;
   private readonly now: () => string;
+  private ignoreConfiguredProfileSessionSeed = false;
 
   constructor(config: PersistlyGameSavesConfig) {
     if (!config.runtimeKey) {
@@ -397,6 +467,48 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     });
     this.store = createStore(config);
     this.now = () => new Date().toISOString();
+  }
+
+  async createProfile(): Promise<PersistlyEnsureProfileResult> {
+    await this.assertNoExistingLocalProfileState(
+      "createProfile requires empty local profile state. Call clearLocalProfile() before creating a different profile.",
+    );
+    const profile = await this.getOrCreateLocalProfile();
+    const created = await this.createRemoteProfile(profile);
+    if (!created.profileSaveId) {
+      throw new PersistlyConfigurationError("createProfile could not resolve profileSaveId.");
+    }
+    return {
+      status: PersistlyGameSaveStatus.Synced,
+      target: PersistlyGameSaveTarget.Profile,
+      profileSaveId: created.profileSaveId,
+      profile: profileRecordToSave(created),
+    };
+  }
+
+  async attachProfile(options: PersistlyAttachProfileOptions): Promise<PersistlyEnsureProfileResult> {
+    await this.assertNoExistingLocalProfileState(
+      "attachProfile requires empty local profile state. Call clearLocalProfile() before attaching a different profile.",
+    );
+    this.ignoreConfiguredProfileSessionSeed = true;
+    const seed: ProfileRecord = {
+      schema: PROFILE_RECORD_SCHEMA,
+      schemaVersion: 1,
+      profileSaveId: options.profileSaveId,
+      profileSessionToken: options.profileSessionToken,
+      metadata: {},
+      accountData: {},
+      characterSlots: [],
+      dirty: false,
+    };
+    await this.store.setProfile(seed);
+    const attached = await this.loadRemoteProfile(seed as ProfileRecord & { profileSaveId: string; profileSessionToken: string });
+    return {
+      status: PersistlyGameSaveStatus.Synced,
+      target: PersistlyGameSaveTarget.Profile,
+      profileSaveId: attached.profileSaveId ?? options.profileSaveId,
+      profile: profileRecordToSave(attached),
+    };
   }
 
   async ensureProfile(): Promise<PersistlyEnsureProfileResult> {
@@ -432,6 +544,36 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       profileSaveId: profile.profileSaveId,
       ...(options.includeToken ? { profileSessionToken: profile.profileSessionToken } : {}),
     };
+  }
+
+  async inspectProfile(): Promise<PersistlyProfileInspection> {
+    const profile = await this.store.getProfile();
+    if (!profile) {
+      return {
+        status: PersistlyGameSaveStatus.NotFound,
+        target: PersistlyGameSaveTarget.Profile,
+        dirty: false,
+      };
+    }
+
+    return {
+      status: PersistlyGameSaveStatus.LocalFound,
+      target: PersistlyGameSaveTarget.Profile,
+      ...(profile.profileSaveId === undefined ? {} : { profileSaveId: profile.profileSaveId }),
+      metadata: clone(profile.metadata),
+      accountData: clone(profile.accountData),
+      characterSlots: clone(profile.characterSlots),
+      ...(profile.version === undefined ? {} : { version: profile.version }),
+      dirty: profile.dirty,
+      ...(profile.cloudAccountData === undefined ? {} : { lastCloudAccountData: clone(profile.cloudAccountData) }),
+      ...(profile.cloudMetadata === undefined ? {} : { lastCloudMetadata: clone(profile.cloudMetadata) }),
+      ...(profile.cloudVersion === undefined ? {} : { cloudVersion: profile.cloudVersion }),
+      ...(profile.lastRemoteSyncedAt === undefined ? {} : { lastRemoteSyncedAt: profile.lastRemoteSyncedAt }),
+    };
+  }
+
+  async getAccountData(): Promise<JsonObject> {
+    return clone((await this.store.getProfile())?.accountData ?? {});
   }
 
   async saveAccountData(accountData: JsonObject): Promise<PersistlyGameSaveSyncResult> {
@@ -562,6 +704,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     state: JsonObject,
     options: PersistlyGameSavesSaveSlotOptions = {},
   ): Promise<PersistlyGameSaveSyncResult> {
+    await this.getOrCreateLocalProfile();
     const canonicalSlotKey = assertSlotKey(slotKey);
     const existing = await this.store.getSlot(canonicalSlotKey);
     const reusableExisting = existing?.archived ? undefined : existing;
@@ -619,6 +762,68 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       ...(slot.lastLocalSavedAt === undefined ? {} : { lastLocalSavedAt: slot.lastLocalSavedAt }),
       ...(slot.lastRemoteSyncedAt === undefined ? {} : { lastRemoteSyncedAt: slot.lastRemoteSyncedAt }),
     };
+  }
+
+  async refreshSlot(slotKey: string): Promise<PersistlyGameSaveSyncResult> {
+    const canonicalSlotKey = assertSlotKey(slotKey);
+    const profile = await this.requireProfileSession("refreshSlot");
+    let slot = await this.store.getSlot(canonicalSlotKey);
+
+    if (!slot?.characterSaveId) {
+      await this.materializeProfileSlotRefs(profile);
+      slot = await this.store.getSlot(canonicalSlotKey);
+    }
+
+    if (!slot?.characterSaveId) {
+      return this.emit({
+        status: PersistlyGameSaveStatus.NoChanges,
+        target: PersistlyGameSaveTarget.Slot,
+        slotKey: canonicalSlotKey,
+      });
+    }
+
+    try {
+      const remote = await this.client.loadProfileCharacter({
+        profileSaveId: profile.profileSaveId,
+        profileSessionToken: profile.profileSessionToken,
+        characterSaveId: slot.characterSaveId,
+      });
+
+      if (slot.dirty) {
+        await this.store.setSlot({
+          ...slot,
+          cloudState: clone(remote.state),
+          cloudMetadata: clone(remote.metadata),
+          cloudVersion: remote.version,
+        });
+        return this.emit({
+          status: PersistlyGameSaveStatus.Conflict,
+          target: PersistlyGameSaveTarget.Slot,
+          slotKey: canonicalSlotKey,
+          localState: clone(slot.state),
+          cloudState: clone(remote.state),
+          ...(slot.version === undefined ? {} : { localVersion: slot.version }),
+          cloudVersion: remote.version,
+          cloudSave: remote,
+        });
+      }
+
+      await this.store.setSlot(slotFromSave(
+        canonicalSlotKey,
+        remote,
+        remote.state,
+        stripReservedSlotMetadata(remote.metadata),
+        this.now(),
+      ));
+      return this.emit({
+        status: PersistlyGameSaveStatus.Synced,
+        target: PersistlyGameSaveTarget.Slot,
+        slotKey: canonicalSlotKey,
+        save: remote,
+      });
+    } catch (error) {
+      return this.mapSyncError(error, PersistlyGameSaveTarget.Slot, canonicalSlotKey);
+    }
   }
 
   async forceSync(slotKey: string, options: PersistlyGameSavesSyncOptions = {}): Promise<PersistlyGameSaveSyncResult> {
@@ -701,6 +906,84 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     } catch (error) {
       return this.mapSyncError(error, PersistlyGameSaveTarget.Slot, canonicalSlotKey);
     }
+  }
+
+  async deleteProfile(): Promise<PersistlyGameSaveSyncResult> {
+    const localProfile = await this.store.getProfile();
+    const slotKeys = await this.store.listSlotKeys();
+    if (!localProfile?.profileSaveId || !localProfile.profileSessionToken) {
+      for (const slotKey of slotKeys) {
+        await this.store.deleteSlot(slotKey);
+      }
+      await this.store.deleteProfile();
+      this.ignoreConfiguredProfileSessionSeed = true;
+      return this.emit({ status: PersistlyGameSaveStatus.LocalSaved, target: PersistlyGameSaveTarget.Profile });
+    }
+
+    const profile = await this.requireProfileSession("deleteProfile");
+    const result = await this.client.deleteProfile({
+      profileSaveId: profile.profileSaveId,
+      profileSessionToken: profile.profileSessionToken,
+    });
+    for (const slotKey of slotKeys) {
+      await this.store.deleteSlot(slotKey);
+    }
+    await this.store.deleteProfile();
+    this.ignoreConfiguredProfileSessionSeed = true;
+    return this.emit({
+      status: PersistlyGameSaveStatus.Synced,
+      target: PersistlyGameSaveTarget.Profile,
+      ...(result.cleanupQueued ? { warnings: ["delete_cleanup_queued"] } : {}),
+    });
+  }
+
+  async deleteSlot(slotKey: string): Promise<PersistlyGameSaveSyncResult> {
+    const canonicalSlotKey = assertSlotKey(slotKey);
+    const slot = await this.store.getSlot(canonicalSlotKey);
+    if (!slot) {
+      return this.emit({ status: PersistlyGameSaveStatus.NoChanges, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey });
+    }
+    if (!slot.characterSaveId) {
+      await this.store.deleteSlot(canonicalSlotKey);
+      const profile = await this.store.getProfile();
+      if (profile) {
+        await this.store.setProfile(removeSlotRefFromProfile(profile, canonicalSlotKey));
+      }
+      return this.emit({ status: PersistlyGameSaveStatus.LocalSaved, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey });
+    }
+
+    const profile = await this.requireProfileSession("deleteSlot");
+    const result = await this.client.deleteProfileCharacter({
+      profileSaveId: profile.profileSaveId,
+      profileSessionToken: profile.profileSessionToken,
+      characterSaveId: slot.characterSaveId,
+    });
+    await this.store.deleteSlot(canonicalSlotKey);
+    if (result.profile) {
+      await this.store.setProfile({
+        ...profileFromSave(result.profile, profile.profileSessionToken, profile.syncPolicy),
+        dirty: false,
+        lastRemoteSyncedAt: this.now(),
+      });
+    } else {
+      await this.store.setProfile(removeSlotRefFromProfile(profile, canonicalSlotKey, slot.characterSaveId, this.now()));
+    }
+    return this.emit({
+      status: PersistlyGameSaveStatus.Synced,
+      target: PersistlyGameSaveTarget.Slot,
+      slotKey: canonicalSlotKey,
+      ...(result.profile === undefined ? {} : { profile: result.profile }),
+      ...(result.cleanupQueued ? { warnings: ["delete_cleanup_queued"] } : {}),
+    });
+  }
+
+  async clearLocalProfile(): Promise<PersistlyGameSaveSyncResult> {
+    for (const slotKey of await this.store.listSlotKeys()) {
+      await this.store.deleteSlot(slotKey);
+    }
+    await this.store.deleteProfile();
+    this.ignoreConfiguredProfileSessionSeed = true;
+    return { status: PersistlyGameSaveStatus.LocalSaved, target: PersistlyGameSaveTarget.Profile };
   }
 
   async clearLocalSlot(slotKey: string): Promise<PersistlyGameSaveSyncResult> {
@@ -858,9 +1141,15 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     const profile: ProfileRecord = {
       schema: PROFILE_RECORD_SCHEMA,
       schemaVersion: 1,
-      ...(this.config.profileSaveId === undefined ? {} : { profileSaveId: this.config.profileSaveId }),
-      ...(this.config.profileSessionToken === undefined ? {} : { profileSessionToken: this.config.profileSessionToken }),
-      ...(this.config.profileSaveId === undefined || this.config.profileSessionToken === undefined ? { version: 1 } : {}),
+      ...(this.ignoreConfiguredProfileSessionSeed || this.config.profileSaveId === undefined
+        ? {}
+        : { profileSaveId: this.config.profileSaveId }),
+      ...(this.ignoreConfiguredProfileSessionSeed || this.config.profileSessionToken === undefined
+        ? {}
+        : { profileSessionToken: this.config.profileSessionToken }),
+      ...(this.ignoreConfiguredProfileSessionSeed || this.config.profileSaveId === undefined || this.config.profileSessionToken === undefined
+        ? { version: 1 }
+        : {}),
       metadata: {},
       accountData: {},
       characterSlots: [],
@@ -906,6 +1195,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     const syncPolicy = envelope.syncPolicy ?? (await this.client.getRuntimeConfig()).syncPolicy;
     const nextProfile = profileFromSave(envelope.profile, profile.profileSessionToken, syncPolicy);
     await this.store.setProfile({ ...nextProfile, dirty: false, lastRemoteSyncedAt: this.now() });
+    await this.materializeProfileSlotRefs(nextProfile);
     return nextProfile;
   }
 
@@ -975,6 +1265,41 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     };
     await this.store.setSlot(reconciled);
     return reconciled;
+  }
+
+  private async assertNoExistingLocalProfileState(message: string): Promise<void> {
+    const profile = await this.store.getProfile();
+    const slotKeys = await this.store.listSlotKeys();
+    if (!isBlankLocalProfile(profile) || slotKeys.length > 0) {
+      throw new PersistlyConfigurationError(message);
+    }
+  }
+
+  private async materializeProfileSlotRefs(profile: ProfileRecord): Promise<void> {
+    for (const slotRef of profile.characterSlots) {
+      const slotKey = typeof slotRef.slotKey === "string" ? slotRef.slotKey : "";
+      if (!slotKey) {
+        continue;
+      }
+      const existing = await this.store.getSlot(slotKey);
+      if (existing) {
+        continue;
+      }
+      const metadata = "metadata" in slotRef ? stripReservedSlotMetadata(parseObject(slotRef.metadata, `profile.characterSlots.${slotKey}.metadata`)) : {};
+      const characterSaveId = typeof slotRef.characterSaveId === "string" ? slotRef.characterSaveId : undefined;
+      const archived = slotRef.archived === true;
+      const stub: SlotRecord = {
+        schema: SLOT_RECORD_SCHEMA,
+        schemaVersion: 1,
+        slotKey,
+        ...(characterSaveId === undefined ? {} : { characterSaveId }),
+        metadata,
+        state: {},
+        dirty: false,
+        archived,
+      };
+      await this.store.setSlot(stub);
+    }
   }
 }
 
@@ -1051,8 +1376,45 @@ function profileRecordToSave(profile: ProfileRecord): Save {
   };
 }
 
+function removeSlotRefFromProfile(
+  profile: ProfileRecord,
+  slotKey: string,
+  characterSaveId?: string,
+  lastRemoteSyncedAt?: string,
+): ProfileRecord {
+  return {
+    ...profile,
+    characterSlots: profile.characterSlots.filter((entry) => {
+      if (entry.slotKey === slotKey) {
+        return false;
+      }
+      if (characterSaveId !== undefined && entry.characterSaveId === characterSaveId) {
+        return false;
+      }
+      return true;
+    }),
+    ...(lastRemoteSyncedAt === undefined ? {} : { lastRemoteSyncedAt }),
+  };
+}
+
 function readProfileAccountData(save: Save): JsonObject {
   return clone(readProfileState(save).accountData);
+}
+
+function isBlankLocalProfile(profile: ProfileRecord | undefined): boolean {
+  if (!profile) {
+    return true;
+  }
+  return !profile.profileSaveId
+    && !profile.profileSessionToken
+    && Object.keys(profile.metadata).length === 0
+    && Object.keys(profile.accountData).length === 0
+    && profile.characterSlots.length === 0
+    && !profile.dirty
+    && profile.cloudAccountData === undefined
+    && profile.cloudMetadata === undefined
+    && profile.cloudVersion === undefined
+    && profile.lastRemoteSyncedAt === undefined;
 }
 
 function readProfileState(save: Save): { accountData: JsonObject; characterSlots: JsonObject[] } {
