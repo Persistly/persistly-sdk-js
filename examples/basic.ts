@@ -20,7 +20,8 @@ const created = await client.createProfile({
   },
 });
 
-// Store these in localStorage, IndexedDB, a save file, or your own backend.
+// Store the profile session in your own trusted account backend or durable local save store.
+// Do not log or expose profileSessionToken in player UI, telemetry, or support screenshots.
 const profileSaveId = created.profileSaveId;
 const profileSessionToken = created.profileSessionToken;
 const characterSaveId = created.character?.saveId;

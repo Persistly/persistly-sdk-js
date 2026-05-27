@@ -25,6 +25,8 @@ if (!created.character) {
 }
 
 const staleVersion = created.character.version;
+// Direct profile APIs require the session token created for this profile.
+// Do not log or expose profileSessionToken in player UI, telemetry, or support screenshots.
 const profileSaveId = created.profileSaveId;
 const profileSessionToken = created.profileSessionToken;
 const characterSaveId = created.character.saveId;

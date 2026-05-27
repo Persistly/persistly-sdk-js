@@ -2,9 +2,9 @@
 
 JavaScript SDK for Persistly cloud saves in browser games, JavaScript game clients, and JS-based engine wrappers.
 
-Most games should start with `PersistlyGameSaves`: configure once, save named slots locally, load named slots locally, and sync to Persistly at safe moments.
+Most games should start with `PersistlyGameSaves`: configure once, save game data locally, load it locally, and sync to Persistly at safe moments. Simple games can use `saveData` and `loadData`. Games with manual saves or multiple characters can use named slots with `saveSlot` and `loadSlot`.
 
-This package is `0.10.1` and pins `persistly-contract-v0.3.0`.
+This package is `0.10.2` and pins `persistly-contract-v0.3.0`.
 
 ## Install
 
@@ -25,16 +25,16 @@ await PersistlyGameSaves.configure({
   storage: "localStorage",
 });
 
-await PersistlyGameSaves.shared.saveSlot("autosave", {
+await PersistlyGameSaves.shared.saveData({
   level: 5,
   coins: 1200,
   checkpoint: "forest-gate",
 });
 
-const loaded = await PersistlyGameSaves.shared.loadSlot("autosave");
+const loaded = await PersistlyGameSaves.shared.loadData();
 console.log("Loaded local state:", loaded.state);
 
-const sync = await PersistlyGameSaves.shared.forceSync("autosave");
+const sync = await PersistlyGameSaves.shared.forceSyncData();
 
 if (sync.status === PersistlyGameSaveStatus.Synced) {
   console.log("Synced to Persistly.");
@@ -47,16 +47,21 @@ if (sync.status === PersistlyGameSaveStatus.Conflict) {
 
 ## How It Works
 
+- `saveData` and `loadData` are the easiest path for one-save games. They use the default `autosave` slot under the hood.
+- `forceSyncData` syncs that same default slot at safe moments such as level complete, pause, or manual save.
+- `inspectData`, `acceptCloudData`, `overwriteCloudData`, and `keepLocalDataForLater` resolve conflicts for that same default slot.
 - `saveSlot` writes local gameplay state immediately. It does not need a network request.
 - `saveSlot` also guarantees a local profile envelope exists, even before the first remote sync.
 - `loadSlot` reads the local slot so your game can boot quickly, even offline.
 - The first `forceSync`, `syncDueSlots`, or `syncDue` call creates the remote Persistly profile and the matching character slot if needed.
-- The SDK stores `profileSaveId`, `profileSessionToken`, and character slot references in the configured storage.
+- The SDK stores the Persistly profile session and character slot references in the configured storage.
 - Later syncs update the same remote character slot and keep local/cloud conflict state separate.
 
 Named slots keep game code stable:
 
 ```ts
+await PersistlyGameSaves.shared.saveData(state); // Same as saveSlot("autosave", state)
+await PersistlyGameSaves.shared.forceSyncData(); // Same as forceSync("autosave")
 await PersistlyGameSaves.shared.saveSlot("autosave", state);
 await PersistlyGameSaves.shared.saveSlot("slot-1", state);
 await PersistlyGameSaves.shared.saveSlot("mage", state);
@@ -73,7 +78,8 @@ const session = await PersistlyGameSaves.shared.getProfileSession({
 
 // Store these in your trusted backend if you support account login.
 console.log(session.profileSaveId);
-console.log(session.profileSessionToken);
+// Send session.profileSessionToken to your trusted backend over HTTPS.
+// Do not log, expose, or publish the session token.
 ```
 
 `playerRef` and `externalProfileRef` are optional developer references. They are not authentication, ownership proof, public lookup inputs, or recovery keys.
@@ -163,21 +169,30 @@ Do not store raw payment transactions, card data, receipts, invoices, or billing
 
 Persistly never overwrites local gameplay state automatically on conflict. When cloud state is newer, the SDK keeps both versions so your game can decide.
 
+For one-save games, keep conflict recovery on the default-data facade:
+
 ```ts
-const sync = await PersistlyGameSaves.shared.forceSync("autosave");
+const sync = await PersistlyGameSaves.shared.forceSyncData();
 
 if (sync.status === PersistlyGameSaveStatus.Conflict) {
-  const slot = await PersistlyGameSaves.shared.inspectSlot("autosave");
+  const save = await PersistlyGameSaves.shared.inspectData();
 
-  // slot.state is local gameplay state.
-  // slot.lastCloudState is the canonical cloud version.
+  // save.state is local gameplay state.
+  // save.lastCloudState is the canonical cloud version.
   // Show a UI, merge intentionally, or keep local for later.
 }
+
+await PersistlyGameSaves.shared.acceptCloudData();
+await PersistlyGameSaves.shared.overwriteCloudData();
+await PersistlyGameSaves.shared.keepLocalDataForLater();
 ```
 
-Safe recovery helpers:
+For games with manual saves or multiple characters, use the slot-specific helpers:
 
 ```ts
+const sync = await PersistlyGameSaves.shared.forceSync("autosave");
+const slot = await PersistlyGameSaves.shared.inspectSlot("autosave");
+
 await PersistlyGameSaves.shared.acceptCloudVersion("autosave");
 await PersistlyGameSaves.shared.overwriteCloudVersion("autosave");
 await PersistlyGameSaves.shared.keepLocalForLater("autosave");
@@ -205,6 +220,8 @@ const created = await client.createProfile({
 
 const result = await client.syncProfileCharacter({
   profileSaveId: created.profileSaveId,
+  // Direct profile APIs require the session token created for this profile.
+  // Do not log or expose this value in game UI, telemetry, or public support output.
   profileSessionToken: created.profileSessionToken,
   characterSaveId: created.character!.saveId,
   metadata: created.character!.metadata,
@@ -213,6 +230,8 @@ const result = await client.syncProfileCharacter({
 
 await client.deleteProfileCharacter({
   profileSaveId: created.profileSaveId,
+  // Direct profile APIs require the session token created for this profile.
+  // Do not log or expose this value in game UI, telemetry, or public support output.
   profileSessionToken: created.profileSessionToken,
   characterSaveId: created.character!.saveId,
 });

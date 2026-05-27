@@ -11,5 +11,5 @@ const result = await PersistlyGameSaves.shared.saveSlot("autosave", {
 });
 
 if (result.status === PersistlyGameSaveStatus.LocalSaved) {
-  console.log("Saved locally. Persistly will sync when allowed.");
+  console.log("Saved locally. Call forceSync or syncDue from a safe lifecycle moment.");
 }

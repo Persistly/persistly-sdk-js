@@ -83,7 +83,7 @@ test("createSave posts the contract payload and caches the canonical save", asyn
   const headers = new Headers(requests[0]?.init?.headers);
   assert.match(String(headers.get("authorization")), /^Bearer ps_test_runtime$/);
   assert.equal(headers.get("x-persistly-sdk"), "javascript");
-  assert.equal(headers.get("x-persistly-sdk-version"), "0.10.1");
+  assert.equal(headers.get("x-persistly-sdk-version"), "0.10.2");
   assert.ok(headers.get("x-persistly-platform"));
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
     playerRef: "player-184",

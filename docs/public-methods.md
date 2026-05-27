@@ -71,11 +71,15 @@ Public methods:
 - `patchAccountData(accountDataPatch: JsonObject): Promise<PersistlyGameSaveSyncResult>`
 - `forceSyncProfile(options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult>`
 - `syncDueProfile(options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult>`
+- `loadData(): Promise<PersistlySlotInspection>`
+- `saveData(state: JsonObject, options?: PersistlyGameSavesSaveSlotOptions): Promise<PersistlyGameSaveSyncResult>`
+- `inspectData(): Promise<PersistlySlotInspection>`
 - `loadSlot(slotKey: string): Promise<PersistlySlotInspection>`
 - `saveSlot(slotKey: string, state: JsonObject, options?: PersistlyGameSavesSaveSlotOptions): Promise<PersistlyGameSaveSyncResult>`
 - `listSlots(options?: { includeArchived?: boolean }): Promise<PersistlySlotInspection[]>`
 - `inspectSlot(slotKey: string): Promise<PersistlySlotInspection>`
 - `refreshSlot(slotKey: string): Promise<PersistlyGameSaveSyncResult>`
+- `forceSyncData(options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult>`
 - `forceSync(slotKey: string, options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult>`
 - `syncDueSlots(options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult[]>`
 - `syncDue(options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult[]>`
@@ -84,6 +88,9 @@ Public methods:
 - `deleteSlot(slotKey: string): Promise<PersistlyGameSaveSyncResult>`
 - `clearLocalProfile(): Promise<PersistlyGameSaveSyncResult>`
 - `clearLocalSlot(slotKey: string): Promise<PersistlyGameSaveSyncResult>`
+- `acceptCloudData(): Promise<PersistlyGameSaveSyncResult>`
+- `overwriteCloudData(options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult>`
+- `keepLocalDataForLater(): Promise<PersistlyGameSaveSyncResult>`
 - `acceptCloudVersion(slotKey: string): Promise<PersistlyGameSaveSyncResult>`
 - `overwriteCloudVersion(slotKey: string, options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult>`
 - `keepLocalForLater(slotKey: string): Promise<PersistlyGameSaveSyncResult>`
@@ -591,6 +598,22 @@ Private/helpers called:
 
 #### `saveSlot(slotKey, state, options)`
 
+#### `loadData()`
+
+Alias for `loadSlot("autosave")`. Use this for one-save games that do not need manual slots or character slots yet.
+
+#### `saveData(state, options)`
+
+Alias for `saveSlot("autosave", state, options)`. It writes local gameplay state immediately and uses the same profile-backed default slot as the named-slot facade.
+
+#### `inspectData()`
+
+Alias for `inspectSlot("autosave")`. Use this after `forceSyncData` reports a conflict so one-save game code can inspect local and cloud versions without introducing slot-key parameters.
+
+#### `forceSyncData(options)`
+
+Alias for `forceSync("autosave", options)`. Use this with `saveData` when a one-save game reaches a safe remote-sync moment.
+
 Comments: None.
 
 Private/helpers called:
@@ -752,6 +775,18 @@ Private/helpers called:
 
 - `assertSlotKey(slotKey)`
 - `store.deleteSlot(canonicalSlotKey)`
+
+#### `acceptCloudData()`
+
+Alias for `acceptCloudVersion("autosave")`. Use this for one-save conflict recovery when the player chooses the cloud version.
+
+#### `overwriteCloudData(options)`
+
+Alias for `overwriteCloudVersion("autosave", options)`. Use this for one-save conflict recovery when the player chooses the local version.
+
+#### `keepLocalDataForLater()`
+
+Alias for `keepLocalForLater("autosave")`. Use this for one-save conflict recovery when the player wants to decide later.
 
 #### `acceptCloudVersion(slotKey)`
 

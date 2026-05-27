@@ -1,4 +1,4 @@
-import { cloneSaveSnapshot, parseSaveSnapshot, type JsonObject, type JsonValue, type SaveSnapshot } from "./schema.js";
+import { cloneSaveSnapshot, parseSaveSnapshot, type SaveSnapshot } from "./schema.js";
 
 export type { JsonObject, JsonValue, SaveSnapshot } from "./schema.js";
 

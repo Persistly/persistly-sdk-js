@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   DEFAULT_PERSISTLY_API_BASE_URL,
+  PersistlyDefaultSlotKey,
   PersistlyGameSaveStatus,
   PersistlyGameSaveTarget,
   PersistlyGameSaves,
@@ -94,6 +95,7 @@ function createProfileEnvelope(character?: ReturnType<typeof createSave>) {
 }
 
 test("exports high-level status and target constants", () => {
+  assert.equal(PersistlyDefaultSlotKey, "autosave");
   assert.equal(PersistlyGameSaveStatus.LocalSaved, "local_saved");
   assert.equal(PersistlyGameSaveStatus.LocalFound, "local_found");
   assert.equal(PersistlyGameSaveStatus.NotFound, "not_found");
@@ -110,6 +112,10 @@ test("exports high-level status and target constants", () => {
 test("shared facade fails clearly before configure", async () => {
   await assert.rejects(
     () => PersistlyGameSaves.shared.loadSlot("autosave"),
+    /not_configured/,
+  );
+  await assert.rejects(
+    () => PersistlyGameSaves.shared.loadData(),
     /not_configured/,
   );
 });
@@ -367,6 +373,91 @@ test("saveSlot, loadSlot, listSlots, and inspectSlot are local-first", async () 
   assert.deepEqual(listed.map((slot) => slot.slotKey), ["autosave"]);
   assert.equal(inspected.dirty, true);
   assert.equal(fetchCalls, 0);
+});
+
+test("saveData and loadData use the default autosave slot", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const persistly = await PersistlyGameSaves.start({
+    runtimeKey: "ps_test_example",
+    storage: "memory",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return createJsonResponse(201, createProfileEnvelope(createSave("sv_autosave", { level: 1, coins: 50, checkpoint: "forest-gate" }, 1, {
+        _persistly: { slotKey: "autosave" },
+      })));
+    },
+  });
+
+  const saved = await persistly.saveData({ level: 1, coins: 50, checkpoint: "forest-gate" });
+  const loaded = await persistly.loadData();
+  const inspected = await persistly.inspectSlot(PersistlyDefaultSlotKey);
+  const slots = await persistly.listSlots();
+  const synced = await persistly.forceSyncData({ bypassCooldown: true });
+
+  assert.equal(saved.status, PersistlyGameSaveStatus.LocalSaved);
+  assert.equal(saved.slotKey, "autosave");
+  assert.equal(loaded.status, PersistlyGameSaveStatus.LocalFound);
+  assert.equal(loaded.slotKey, "autosave");
+  assert.deepEqual(loaded.state, { level: 1, coins: 50, checkpoint: "forest-gate" });
+  assert.deepEqual(inspected.state, loaded.state);
+  assert.deepEqual(slots.map((slot) => slot.slotKey), ["autosave"]);
+  assert.equal(synced.status, PersistlyGameSaveStatus.Synced);
+  assert.equal(synced.slotKey, "autosave");
+  assert.equal(requests.length, 1);
+});
+
+test("one-save conflict helpers use the default autosave slot", async () => {
+  let syncCalls = 0;
+  const persistly = await PersistlyGameSaves.start({
+    runtimeKey: "ps_test_example",
+    storage: "memory",
+    profileSaveId: "sv_profile",
+    profileSessionToken: "pst_session",
+    fetch: async (input) => {
+      const url = String(input);
+      if (url.endsWith("/profiles/sv_profile")) {
+        return createJsonResponse(200, {
+          ...createProfileEnvelope(),
+          profileSessionToken: undefined,
+        });
+      }
+
+      syncCalls += 1;
+      if (url.endsWith("/characters") && syncCalls === 1) {
+        return createJsonResponse(201, {
+          ...createProfileEnvelope(createSave("sv_character", { coins: 10 }, 1, { _persistly: { slotKey: "autosave" } })),
+          profileSessionToken: undefined,
+        });
+      }
+      if (url.endsWith("/characters/sv_character/sync") && syncCalls === 2) {
+        return createJsonResponse(409, {
+          status: PersistlySyncStatus.Conflict,
+          save: createSave("sv_character", { coins: 20 }, 3, { _persistly: { slotKey: "autosave" } }),
+          details: { reason: "base_version_mismatch" },
+        });
+      }
+      return createJsonResponse(200, {
+        status: PersistlySyncStatus.Accepted,
+        save: createSave("sv_character", { coins: 30 }, 4, { _persistly: { slotKey: "autosave" } }),
+      });
+    },
+  });
+
+  await persistly.saveData({ coins: 10 });
+  await persistly.forceSyncData({ bypassCooldown: true });
+  await persistly.saveData({ coins: 30 });
+  const conflict = await persistly.forceSyncData({ bypassCooldown: true });
+  const inspectedConflict = await persistly.inspectData();
+
+  assert.equal(conflict.status, PersistlyGameSaveStatus.Conflict);
+  assert.deepEqual(inspectedConflict.state, { coins: 30 });
+  assert.deepEqual(inspectedConflict.lastCloudState, { coins: 20 });
+  assert.equal((await persistly.keepLocalDataForLater()).status, PersistlyGameSaveStatus.LocalSaved);
+  assert.equal((await persistly.acceptCloudData()).status, PersistlyGameSaveStatus.Synced);
+  assert.deepEqual((await persistly.loadData()).state, { coins: 20 });
+
+  await persistly.saveData({ coins: 30 });
+  assert.equal((await persistly.overwriteCloudData({ bypassCooldown: true })).status, PersistlyGameSaveStatus.Synced);
 });
 
 test("clearLocalProfile removes local profile and slots and prevents old configured session reseed", async () => {
