@@ -22,7 +22,6 @@ import {
 
 await PersistlyGameSaves.configure({
   runtimeKey: "ps_test_replace_me",
-  storage: "localStorage",
 });
 
 await PersistlyGameSaves.shared.saveData({
@@ -48,6 +47,7 @@ if (sync.status === PersistlyGameSaveStatus.Conflict) {
 ## How It Works
 
 - `saveData` and `loadData` are the easiest path for one-save games. They use the default `autosave` slot under the hood.
+- Browser integrations use Persistly's built-in `localStorage` adapter by default. Use `storage: "memory"` only for temporary/test flows, or pass `storageHelper` if your game needs a custom local storage implementation.
 - `forceSyncData` syncs that same default slot at safe moments such as level complete, pause, or manual save.
 - `inspectData`, `acceptCloudData`, `overwriteCloudData`, and `keepLocalDataForLater` resolve conflicts for that same default slot.
 - `saveSlot` writes local gameplay state immediately. It does not need a network request.

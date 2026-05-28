@@ -143,6 +143,21 @@ test("start is local-only and localStorage namespace prefers external profile re
   assert.ok([...storage.values.keys()].some((key) => key.includes("auth0%3Aauth0%7Cabc123")));
 });
 
+test("start defaults to browser localStorage when it is available", async () => {
+  const storage = new FakeStorage();
+
+  await withFakeLocalStorage(storage, async () => {
+    const persistly = await PersistlyGameSaves.start({
+      runtimeKey: "ps_test_example",
+      localProfileKey: "profile",
+    });
+
+    await persistly.saveData({ coins: 42 });
+  });
+
+  assert.ok([...storage.values.keys()].some((key) => key.includes("persistly:game-saves:ps_test_example:profile")));
+});
+
 test("ensureProfile creates profile-only and getProfileSession hides token unless requested", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const persistly = await PersistlyGameSaves.start({

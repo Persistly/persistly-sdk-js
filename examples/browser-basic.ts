@@ -2,7 +2,6 @@ import { PersistlyGameSaveStatus, PersistlyGameSaves } from "../src/index.js";
 
 await PersistlyGameSaves.configure({
   runtimeKey: "ps_test_replace_me",
-  storage: "localStorage",
 });
 
 const result = await PersistlyGameSaves.shared.saveSlot("autosave", {

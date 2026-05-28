@@ -1384,7 +1384,15 @@ export class PersistlyGameSaves {
 }
 
 function createStore(config: PersistlyGameSavesConfig): GameSavesStore {
-  if ((config.storage ?? "memory") === "localStorage") {
+  if (config.storage === "memory") {
+    return new MemoryGameSavesStore();
+  }
+
+  if (
+    config.storage === "localStorage" ||
+    config.storageHelper ||
+    (globalThis as { localStorage?: LocalStorageLike }).localStorage
+  ) {
     return new LocalStorageGameSavesStore(config);
   }
 
