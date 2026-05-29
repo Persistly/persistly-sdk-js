@@ -5,9 +5,9 @@ export type PersistlyErrorCode =
   | "not_found"
   | "conflict"
   | "slot_already_exists"
-  | "character_archived"
-  | "profile_deleted"
-  | "character_deleted"
+  | "slot_archived"
+  | "account_deleted"
+  | "slot_deleted"
   | "rate_limited"
   | "payload_too_large"
   | "server_error";
@@ -66,24 +66,24 @@ export class PersistlySlotAlreadyExistsError extends PersistlyApiError {
   }
 }
 
-export class PersistlyCharacterArchivedError extends PersistlyApiError {
+export class PersistlySlotArchivedError extends PersistlyApiError {
   constructor(message: string, details?: Record<string, unknown>, status = 409) {
-    super(status, "character_archived", message, details);
-    this.name = "PersistlyCharacterArchivedError";
+    super(status, "slot_archived", message, details);
+    this.name = "PersistlySlotArchivedError";
   }
 }
 
-export class PersistlyProfileDeletedError extends PersistlyApiError {
+export class PersistlyAccountDeletedError extends PersistlyApiError {
   constructor(message: string, details?: Record<string, unknown>, status = 410) {
-    super(status, "profile_deleted", message, details);
-    this.name = "PersistlyProfileDeletedError";
+    super(status, "account_deleted", message, details);
+    this.name = "PersistlyAccountDeletedError";
   }
 }
 
-export class PersistlyCharacterDeletedError extends PersistlyApiError {
+export class PersistlySlotDeletedError extends PersistlyApiError {
   constructor(message: string, details?: Record<string, unknown>, status = 410) {
-    super(status, "character_deleted", message, details);
-    this.name = "PersistlyCharacterDeletedError";
+    super(status, "slot_deleted", message, details);
+    this.name = "PersistlySlotDeletedError";
   }
 }
 
@@ -156,12 +156,12 @@ export function createPersistlyApiError(
       return new PersistlyConflictError(message, details, status);
     case "slot_already_exists":
       return new PersistlySlotAlreadyExistsError(message, details, status);
-    case "character_archived":
-      return new PersistlyCharacterArchivedError(message, details, status);
-    case "profile_deleted":
-      return new PersistlyProfileDeletedError(message, details, status);
-    case "character_deleted":
-      return new PersistlyCharacterDeletedError(message, details, status);
+    case "slot_archived":
+      return new PersistlySlotArchivedError(message, details, status);
+    case "account_deleted":
+      return new PersistlyAccountDeletedError(message, details, status);
+    case "slot_deleted":
+      return new PersistlySlotDeletedError(message, details, status);
     case "rate_limited":
       return new PersistlyRateLimitedError(message, details, status);
     case "payload_too_large":

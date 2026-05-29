@@ -30,7 +30,7 @@ export interface SyncSaveInput {
   state: JsonObject;
 }
 
-export interface ExternalProfileRef {
+export interface ExternalAccountRef {
   provider: string;
   subject: string;
 }
@@ -63,77 +63,134 @@ export interface RuntimeGameConfig {
   config?: JsonObject;
 }
 
-export interface CreateProfileInput {
+export interface CreateAccountInput {
   playerRef?: string;
-  externalProfileRef?: ExternalProfileRef;
-  profileMetadata?: JsonObject;
+  externalAccountRef?: ExternalAccountRef;
+  /** @internal */
+  externalProfileRef?: ExternalAccountRef;
   accountData?: JsonObject;
+  slot?: {
+    slotId: string;
+    slotInfo?: JsonObject;
+    data: JsonObject;
+  };
+  /** @internal */
   character?: {
     metadata: JsonObject;
     state: JsonObject;
   };
 }
 
-export interface ProfileEnvelope {
-  profileSaveId: string;
-  profileSessionToken?: string;
-  profile: Save;
-  character?: Save;
-  syncPolicy?: SyncPolicy;
+export interface AccountSlotSummary {
+  slotId: string;
+  slotInfo: JsonObject;
+  version?: number;
+  status?: "active" | "archived";
+  updatedAt?: string;
 }
 
-export interface CreatedProfileEnvelope extends ProfileEnvelope {
-  profileSessionToken: string;
+export interface Account {
+  accountId: string;
+  accountData: JsonObject;
+  slots: AccountSlotSummary[];
+  version?: number;
+}
+
+export interface AccountSlot {
+  slotId: string;
+  slotInfo: JsonObject;
+  data: JsonObject;
+  version: number;
+  updatedAt: string;
+  /** @internal compatibility projection for older facade internals. */
+  saveId: string;
+  /** @internal compatibility projection for older facade internals. */
+  metadata: JsonObject;
+  /** @internal compatibility projection for older facade internals. */
+  state: JsonObject;
+  /** @internal compatibility projection for older facade internals. */
+  createdAt: string;
+  /** @internal compatibility projection for older facade internals. */
+  playerRef: string | null;
+}
+
+export interface AccountEnvelope {
+  accountId: string;
+  accountSessionToken?: string;
+  account: Account;
+  slot?: AccountSlot;
+  syncPolicy?: SyncPolicy;
+  /** @internal */
+  profile: Save;
+  /** @internal */
+  character?: Save | undefined;
+}
+
+export interface CreatedAccountEnvelope extends AccountEnvelope {
+  accountSessionToken: string;
   syncPolicy: SyncPolicy;
 }
 
-export interface ProfileCharacterEnvelope extends ProfileEnvelope {
+export interface AccountSlotEnvelope extends AccountEnvelope {
+  slot: AccountSlot;
+  /** @internal */
   character: Save;
 }
 
-export interface DeleteProfileResult {
-  profileSaveId: string;
+export interface DeleteAccountResult {
+  accountId: string;
   deletedAt: string;
-  deletedCharacterCount: number;
+  deletedSlotCount: number;
   alreadyDeleted: boolean;
   cleanupQueued: boolean;
 }
 
-export interface DeleteProfileCharacterResult {
-  profileSaveId: string;
-  characterSaveId: string;
+export interface DeleteAccountSlotResult {
+  accountId: string;
+  slotId: string;
   deletedAt: string;
   alreadyDeleted: boolean;
   cleanupQueued: boolean;
-  slotKey?: string;
+  account?: Account;
+  /** @internal */
   profile?: Save;
 }
 
-export interface ProfileSessionInput {
-  profileSaveId: string;
-  profileSessionToken: string;
+export interface AccountSessionInput {
+  accountId: string;
+  accountSessionToken: string;
 }
 
-export interface ProfileCharacterInput extends ProfileSessionInput {
-  characterSaveId: string;
+export interface AccountSlotInput extends AccountSessionInput {
+  slotId?: string;
+  /** @internal */
+  characterSaveId?: string;
 }
 
-export interface CreateProfileCharacterInput extends ProfileSessionInput {
-  metadata: JsonObject;
-  state: JsonObject;
-}
-
-export interface SyncProfileCharacterInput extends ProfileCharacterInput {
-  baseVersion?: number;
+export interface CreateAccountSlotInput extends AccountSessionInput {
+  slotId?: string;
+  slotInfo?: JsonObject;
+  /** @internal */
   metadata?: JsonObject;
-  state: JsonObject;
+  data?: JsonObject;
+  /** @internal */
+  state?: JsonObject;
 }
 
-export interface SyncProfileAccountDataInput extends ProfileSessionInput {
+export interface SyncAccountSlotInput extends AccountSlotInput {
+  baseVersion?: number;
+  slotInfo?: JsonObject;
+  /** @internal */
+  metadata?: JsonObject;
+  data?: JsonObject;
+  /** @internal */
+  state?: JsonObject;
+}
+
+export interface SyncAccountDataInput extends AccountSessionInput {
   baseVersion: number;
   accountData?: JsonObject;
   accountDataPatch?: JsonObject;
-  metadata?: JsonObject | null;
 }
 
 export interface SyncAcceptedResult {
@@ -224,28 +281,23 @@ export class PersistlyClient {
     return save;
   }
 
-  async createProfile(payload: CreateProfileInput): Promise<CreatedProfileEnvelope> {
-    validateProfileCreatePayload(payload);
-    const response = await this.requestJson("/api/v1/profiles", {
+  async createAccount(payload: CreateAccountInput): Promise<CreatedAccountEnvelope> {
+    validateAccountCreatePayload(payload);
+    const requestPayload = normalizeCreateAccountPayload(payload);
+    const response = await this.requestJson("/api/v1/accounts", {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify(requestPayload),
     });
-    const envelope = requireCreatedProfileEnvelope(parseProfileEnvelope(response));
-
-    await this.cache.set(envelope.profile);
-    if (envelope.character) {
-      await this.cache.set(envelope.character);
-    }
+    const envelope = requireCreatedAccountEnvelope(parseAccountEnvelope(response));
 
     return envelope;
   }
 
-  async syncProfileAccountData(payload: SyncProfileAccountDataInput): Promise<SyncSaveResult> {
-    const profileSaveId = assertSaveId(payload.profileSaveId, "syncProfileAccountData");
-    assertProfileSessionToken(payload.profileSessionToken, "syncProfileAccountData");
-    validateSyncProfileAccountDataPayload(payload);
+  async syncAccountData(payload: SyncAccountDataInput): Promise<SyncSaveResult> {
+    const accountId = assertAccountId(payload.accountId, "syncAccountData");
+    assertAccountSessionToken(payload.accountSessionToken, "syncAccountData");
+    validateSyncAccountDataPayload(payload);
     validatePayloadLimits({
-      ...(payload.metadata === undefined || payload.metadata === null ? {} : { metadata: payload.metadata }),
       ...(payload.accountData === undefined && payload.accountDataPatch === undefined
         ? {}
         : { state: payload.accountData ?? payload.accountDataPatch }),
@@ -260,15 +312,12 @@ export class PersistlyClient {
     if (payload.accountDataPatch !== undefined) {
       body.accountDataPatch = payload.accountDataPatch;
     }
-    if ("metadata" in payload) {
-      body.metadata = payload.metadata;
-    }
 
     const response = await this.requestRaw(
-      `/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}/account-data/sync`,
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/data/sync`,
       {
         method: "POST",
-        headers: profileSessionHeaders(payload.profileSessionToken),
+        headers: accountSessionHeaders(payload.accountSessionToken),
         body: JSON.stringify(body),
       },
     );
@@ -276,16 +325,15 @@ export class PersistlyClient {
 
     if (response.status === 200) {
       const accepted = parseAcceptedSyncResult(json);
-      const cached = (await this.cache.get(profileSaveId)) ?? undefined;
+      const cached = (await this.cache.get(accountId)) ?? undefined;
       const result = syncAcceptedResultWithSave(
         accepted,
         accepted.save ??
-          synthesizeProfileSaveFromSync({
-            saveId: profileSaveId,
+          synthesizeAccountSaveFromSync({
+            saveId: accountId,
             cached,
             accountData: payload.accountData,
             accountDataPatch: payload.accountDataPatch,
-            metadata: "metadata" in payload ? payload.metadata : undefined,
           }),
       );
       await this.cache.set(result.save);
@@ -301,123 +349,110 @@ export class PersistlyClient {
     throw parseApiError(response.status, json);
   }
 
-  async loadProfile(payload: ProfileSessionInput): Promise<Save> {
-    const envelope = await this.loadProfileEnvelope(payload);
-    return envelope.profile;
+  async loadAccount(payload: AccountSessionInput): Promise<Account> {
+    const envelope = await this.loadAccountEnvelope(payload);
+    return envelope.account;
   }
 
-  async loadProfileEnvelope(payload: ProfileSessionInput): Promise<ProfileEnvelope> {
-    assertSaveId(payload.profileSaveId, "loadProfile");
-    assertProfileSessionToken(payload.profileSessionToken, "loadProfile");
-    const response = await this.requestJson(`/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}`, {
+  async loadAccountEnvelope(payload: AccountSessionInput): Promise<AccountEnvelope> {
+    const accountId = assertAccountId(payload.accountId, "loadAccount");
+    assertAccountSessionToken(payload.accountSessionToken, "loadAccount");
+    const response = await this.requestJson(`/api/v1/accounts/${encodeURIComponent(accountId)}`, {
       method: "GET",
-      headers: profileSessionHeaders(payload.profileSessionToken),
+      headers: accountSessionHeaders(payload.accountSessionToken),
     });
-    const envelope = parseProfileEnvelope(response);
-
-    await this.cache.set(envelope.profile);
-    if (envelope.character) {
-      await this.cache.set(envelope.character);
-    }
-    return envelope;
+    return parseAccountEnvelope(response);
   }
 
-  async deleteProfile(payload: ProfileSessionInput): Promise<DeleteProfileResult> {
-    assertSaveId(payload.profileSaveId, "deleteProfile");
-    assertProfileSessionToken(payload.profileSessionToken, "deleteProfile");
-    const response = await this.requestJson(`/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}`, {
+  async deleteAccount(payload: AccountSessionInput): Promise<DeleteAccountResult> {
+    const accountId = assertAccountId(payload.accountId, "deleteAccount");
+    assertAccountSessionToken(payload.accountSessionToken, "deleteAccount");
+    const response = await this.requestJson(`/api/v1/accounts/${encodeURIComponent(accountId)}`, {
       method: "DELETE",
-      headers: profileSessionHeaders(payload.profileSessionToken),
+      headers: accountSessionHeaders(payload.accountSessionToken),
     });
-    const result = parseDeleteProfileResult(response);
-    await this.cache.clear(payload.profileSaveId);
+    const result = parseDeleteAccountResult(response);
+    await this.cache.clear(accountId);
     return result;
   }
 
-  async createProfileCharacter(payload: CreateProfileCharacterInput): Promise<ProfileCharacterEnvelope> {
-    assertSaveId(payload.profileSaveId, "createProfileCharacter");
-    assertProfileSessionToken(payload.profileSessionToken, "createProfileCharacter");
-    requireProfileCharacterSlotMetadata(payload.metadata, "createProfileCharacter.metadata");
-    validatePayloadLimits({ metadata: payload.metadata, state: payload.state });
-    const response = await this.requestJson(`/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}/characters`, {
+  async createAccountSlot(payload: CreateAccountSlotInput): Promise<AccountSlotEnvelope> {
+    const accountId = assertAccountId(payload.accountId, "createAccountSlot");
+    const slotId = assertSlotId(payload.slotId ?? readSlotIdFromSlotInfo(payload.metadata ?? payload.slotInfo ?? {}), "createAccountSlot");
+    const data = payload.data ?? payload.state;
+    if (data === undefined) {
+      throw new PersistlyConfigurationError("createAccountSlot requires data.");
+    }
+    assertAccountSessionToken(payload.accountSessionToken, "createAccountSlot");
+    validatePayloadLimits({ metadata: payload.slotInfo ?? payload.metadata ?? {}, state: data });
+    const response = await this.requestJson(`/api/v1/accounts/${encodeURIComponent(accountId)}/slots`, {
       method: "POST",
-      headers: profileSessionHeaders(payload.profileSessionToken),
+      headers: accountSessionHeaders(payload.accountSessionToken),
       body: JSON.stringify({
-        metadata: payload.metadata,
-        state: payload.state,
+        slotId,
+        slotInfo: payload.slotInfo ?? payload.metadata ?? {},
+        data,
       }),
     });
-    const envelope = requireProfileCharacterEnvelope(parseProfileEnvelope(response));
-
-    await this.cache.set(envelope.profile);
-    if (envelope.character) {
-      await this.cache.set(envelope.character);
-    }
-    return envelope;
+    return requireAccountSlotEnvelope(parseAccountEnvelope(response));
   }
 
-  async loadProfileCharacter(payload: ProfileCharacterInput): Promise<Save> {
-    assertSaveId(payload.profileSaveId, "loadProfileCharacter");
-    assertSaveId(payload.characterSaveId, "loadProfileCharacter");
-    assertProfileSessionToken(payload.profileSessionToken, "loadProfileCharacter");
+  async loadAccountSlot(payload: AccountSlotInput): Promise<AccountSlot> {
+    const accountId = assertAccountId(payload.accountId, "loadAccountSlot");
+    const slotId = assertSlotId(payload.slotId ?? payload.characterSaveId ?? "", "loadAccountSlot");
+    assertAccountSessionToken(payload.accountSessionToken, "loadAccountSlot");
     const response = await this.requestJson(
-      `/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}/characters/${encodeURIComponent(payload.characterSaveId)}`,
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/slots/${encodeURIComponent(slotId)}`,
       {
         method: "GET",
-        headers: profileSessionHeaders(payload.profileSessionToken),
+        headers: accountSessionHeaders(payload.accountSessionToken),
       },
     );
-    const save = parseSaveEnvelope(response).save;
-
-    await this.cache.set(save);
-    return save;
+    return parseAccountSlot(response);
   }
 
-  async deleteProfileCharacter(payload: ProfileCharacterInput): Promise<DeleteProfileCharacterResult> {
-    assertSaveId(payload.profileSaveId, "deleteProfileCharacter");
-    assertSaveId(payload.characterSaveId, "deleteProfileCharacter");
-    assertProfileSessionToken(payload.profileSessionToken, "deleteProfileCharacter");
+  async deleteAccountSlot(payload: AccountSlotInput): Promise<DeleteAccountSlotResult> {
+    const accountId = assertAccountId(payload.accountId, "deleteAccountSlot");
+    const slotId = assertSlotId(payload.slotId ?? payload.characterSaveId ?? "", "deleteAccountSlot");
+    assertAccountSessionToken(payload.accountSessionToken, "deleteAccountSlot");
     const response = await this.requestJson(
-      `/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}/characters/${encodeURIComponent(payload.characterSaveId)}`,
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/slots/${encodeURIComponent(slotId)}`,
       {
         method: "DELETE",
-        headers: profileSessionHeaders(payload.profileSessionToken),
+        headers: accountSessionHeaders(payload.accountSessionToken),
       },
     );
-    const result = parseDeleteProfileCharacterResult(response);
-    await this.cache.clear(payload.characterSaveId);
-    if (result.profile) {
-      await this.cache.set(result.profile);
-    }
-    return result;
+    return parseDeleteAccountSlotResult(response);
   }
 
-  async syncProfileCharacter(payload: SyncProfileCharacterInput): Promise<SyncSaveResult> {
-    assertSaveId(payload.profileSaveId, "syncProfileCharacter");
-    assertSaveId(payload.characterSaveId, "syncProfileCharacter");
-    assertProfileSessionToken(payload.profileSessionToken, "syncProfileCharacter");
-    if (payload.metadata !== undefined) {
-      validateReservedProfileCharacterMetadata(payload.metadata, "syncProfileCharacter.metadata");
+  async syncAccountSlot(payload: SyncAccountSlotInput): Promise<SyncSaveResult> {
+    const accountId = assertAccountId(payload.accountId, "syncAccountSlot");
+    const slotId = assertSlotId(payload.slotId ?? payload.characterSaveId ?? "", "syncAccountSlot");
+    assertAccountSessionToken(payload.accountSessionToken, "syncAccountSlot");
+    const data = payload.data ?? payload.state;
+    if (data === undefined) {
+      throw new PersistlyConfigurationError("syncAccountSlot requires data.");
     }
-    validatePayloadLimits(payload);
-    const cached = (await this.cache.get(payload.characterSaveId)) ?? undefined;
+    validatePayloadLimits({ metadata: payload.slotInfo ?? payload.metadata ?? {}, state: data });
+    const cacheId = accountSlotCacheId(accountId, slotId);
+    const cached = (await this.cache.get(cacheId)) ?? undefined;
     const baseVersion = payload.baseVersion ?? cached?.version;
 
     if (!baseVersion) {
       throw new PersistlyConfigurationError(
-        "syncProfileCharacter requires baseVersion unless the cache already holds a canonical save for this characterSaveId.",
+        "syncAccountSlot requires baseVersion unless the cache already holds a canonical slot snapshot for this accountId and slotId.",
       );
     }
 
     const response = await this.requestRaw(
-      `/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}/characters/${encodeURIComponent(payload.characterSaveId)}/sync`,
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/slots/${encodeURIComponent(slotId)}/sync`,
       {
         method: "POST",
-        headers: profileSessionHeaders(payload.profileSessionToken),
+        headers: accountSessionHeaders(payload.accountSessionToken),
         body: JSON.stringify({
           baseVersion,
-          metadata: payload.metadata,
-          state: payload.state,
+          slotInfo: payload.slotInfo ?? payload.metadata,
+          data,
         }),
       },
     );
@@ -429,10 +464,10 @@ export class PersistlyClient {
         accepted,
         accepted.save ??
           synthesizeSaveFromSync({
-            saveId: payload.characterSaveId,
+            saveId: cacheId,
             cached,
-            metadata: payload.metadata,
-            state: payload.state,
+            metadata: payload.slotInfo ?? payload.metadata,
+            state: data,
           }),
       );
       await this.cache.set(result.save);
@@ -448,24 +483,18 @@ export class PersistlyClient {
     throw parseApiError(response.status, json);
   }
 
-  async archiveProfileCharacter(payload: ProfileCharacterInput): Promise<ProfileEnvelope> {
-    assertSaveId(payload.profileSaveId, "archiveProfileCharacter");
-    assertSaveId(payload.characterSaveId, "archiveProfileCharacter");
-    assertProfileSessionToken(payload.profileSessionToken, "archiveProfileCharacter");
+  async archiveAccountSlot(payload: AccountSlotInput): Promise<AccountEnvelope> {
+    const accountId = assertAccountId(payload.accountId, "archiveAccountSlot");
+    const slotId = assertSlotId(payload.slotId ?? payload.characterSaveId ?? "", "archiveAccountSlot");
+    assertAccountSessionToken(payload.accountSessionToken, "archiveAccountSlot");
     const response = await this.requestJson(
-      `/api/v1/profiles/${encodeURIComponent(payload.profileSaveId)}/characters/${encodeURIComponent(payload.characterSaveId)}/archive`,
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/slots/${encodeURIComponent(slotId)}/archive`,
       {
         method: "POST",
-        headers: profileSessionHeaders(payload.profileSessionToken),
+        headers: accountSessionHeaders(payload.accountSessionToken),
       },
     );
-    const envelope = parseProfileEnvelope(response);
-
-    await this.cache.set(envelope.profile);
-    if (envelope.character) {
-      await this.cache.set(envelope.character);
-    }
-    return envelope;
+    return parseAccountEnvelope(response);
   }
 
   async getRuntimeConfig(options: RuntimeConfigOptions = {}): Promise<RuntimeConfig> {
@@ -617,16 +646,34 @@ function assertSaveId(saveId: string, operation: string): string {
   return canonicalSaveId;
 }
 
-function assertProfileSessionToken(token: string, operation: string): string {
+function assertAccountId(accountId: string, operation: string): string {
+  const canonicalAccountId = accountId.trim();
+
+  if (!canonicalAccountId) {
+    throw new PersistlyConfigurationError(`${operation} requires a non-empty accountId.`);
+  }
+
+  return canonicalAccountId;
+}
+
+function assertSlotId(slotId: string, operation: string): string {
+  if (typeof slotId !== "string" || !/^[A-Za-z0-9_.-]{1,64}$/.test(slotId)) {
+    throw new PersistlyConfigurationError(`${operation} slotId must match ^[A-Za-z0-9_.-]{1,64}$.`);
+  }
+
+  return slotId;
+}
+
+function assertAccountSessionToken(token: string, operation: string): string {
   if (typeof token !== "string" || token.trim() === "") {
-    throw new PersistlyConfigurationError(`${operation} requires a non-empty profileSessionToken.`);
+    throw new PersistlyConfigurationError(`${operation} requires a non-empty accountSessionToken.`);
   }
   return token;
 }
 
-function profileSessionHeaders(token: string): HeadersInit {
+function accountSessionHeaders(token: string): HeadersInit {
   return {
-    "x-persistly-profile-session": token,
+    "x-persistly-account-session": token,
   };
 }
 
@@ -681,108 +728,189 @@ function parseSaveEnvelope(value: unknown): SaveEnvelope {
   };
 }
 
-function parseDeleteProfileResult(value: unknown): DeleteProfileResult {
-  const record = parseObject(value, "Delete profile response");
-  if (typeof record.profileSaveId !== "string" || record.profileSaveId.trim() === "") {
-    throw new PersistlyConfigurationError("Delete profile response profileSaveId must be a non-empty string.");
+function parseDeleteAccountResult(value: unknown): DeleteAccountResult {
+  const record = parseObject(value, "Delete account response");
+  if (typeof record.accountId !== "string" || record.accountId.trim() === "") {
+    throw new PersistlyConfigurationError("Delete account response accountId must be a non-empty string.");
   }
   if (typeof record.deletedAt !== "string" || Number.isNaN(Date.parse(record.deletedAt))) {
-    throw new PersistlyConfigurationError("Delete profile response deletedAt must be a valid date-time string.");
+    throw new PersistlyConfigurationError("Delete account response deletedAt must be a valid date-time string.");
   }
-  if (typeof record.deletedCharacterCount !== "number" || !Number.isInteger(record.deletedCharacterCount) || record.deletedCharacterCount < 0) {
-    throw new PersistlyConfigurationError("Delete profile response deletedCharacterCount must be a non-negative integer.");
+  if (typeof record.deletedSlotCount !== "number" || !Number.isInteger(record.deletedSlotCount) || record.deletedSlotCount < 0) {
+    throw new PersistlyConfigurationError("Delete account response deletedSlotCount must be a non-negative integer.");
   }
   if (typeof record.alreadyDeleted !== "boolean") {
-    throw new PersistlyConfigurationError("Delete profile response alreadyDeleted must be a boolean.");
+    throw new PersistlyConfigurationError("Delete account response alreadyDeleted must be a boolean.");
   }
   if (typeof record.cleanupQueued !== "boolean") {
-    throw new PersistlyConfigurationError("Delete profile response cleanupQueued must be a boolean.");
+    throw new PersistlyConfigurationError("Delete account response cleanupQueued must be a boolean.");
   }
   return {
-    profileSaveId: record.profileSaveId,
+    accountId: record.accountId,
     deletedAt: record.deletedAt,
-    deletedCharacterCount: record.deletedCharacterCount,
+    deletedSlotCount: record.deletedSlotCount,
     alreadyDeleted: record.alreadyDeleted,
     cleanupQueued: record.cleanupQueued,
   };
 }
 
-function parseDeleteProfileCharacterResult(value: unknown): DeleteProfileCharacterResult {
-  const record = parseObject(value, "Delete profile character response");
-  if (typeof record.profileSaveId !== "string" || record.profileSaveId.trim() === "") {
-    throw new PersistlyConfigurationError("Delete profile character response profileSaveId must be a non-empty string.");
+function parseDeleteAccountSlotResult(value: unknown): DeleteAccountSlotResult {
+  const record = parseObject(value, "Delete account slot response");
+  if (typeof record.accountId !== "string" || record.accountId.trim() === "") {
+    throw new PersistlyConfigurationError("Delete account slot response accountId must be a non-empty string.");
   }
-  if (typeof record.characterSaveId !== "string" || record.characterSaveId.trim() === "") {
-    throw new PersistlyConfigurationError("Delete profile character response characterSaveId must be a non-empty string.");
+  if (typeof record.slotId !== "string" || record.slotId.trim() === "") {
+    throw new PersistlyConfigurationError("Delete account slot response slotId must be a non-empty string.");
   }
   if (typeof record.deletedAt !== "string" || Number.isNaN(Date.parse(record.deletedAt))) {
-    throw new PersistlyConfigurationError("Delete profile character response deletedAt must be a valid date-time string.");
+    throw new PersistlyConfigurationError("Delete account slot response deletedAt must be a valid date-time string.");
   }
   if (typeof record.alreadyDeleted !== "boolean") {
-    throw new PersistlyConfigurationError("Delete profile character response alreadyDeleted must be a boolean.");
+    throw new PersistlyConfigurationError("Delete account slot response alreadyDeleted must be a boolean.");
   }
   if (typeof record.cleanupQueued !== "boolean") {
-    throw new PersistlyConfigurationError("Delete profile character response cleanupQueued must be a boolean.");
+    throw new PersistlyConfigurationError("Delete account slot response cleanupQueued must be a boolean.");
   }
   return {
-    profileSaveId: record.profileSaveId,
-    characterSaveId: record.characterSaveId,
-    ...(typeof record.slotKey === "string" ? { slotKey: record.slotKey } : {}),
+    accountId: record.accountId,
+    slotId: record.slotId,
     deletedAt: record.deletedAt,
     alreadyDeleted: record.alreadyDeleted,
     cleanupQueued: record.cleanupQueued,
-    ...(record.profile === undefined ? {} : { profile: parseSave(record.profile) }),
+    ...(record.account === undefined ? {} : { account: parseAccount(record.account) }),
+    ...(record.account === undefined ? {} : { profile: accountToSave(parseAccount(record.account)) }),
   };
 }
 
-function parseProfileEnvelope(value: unknown): ProfileEnvelope {
-  const record = parseObject(value, "Profile response");
-  const profileSaveId = record.profileSaveId;
-  const profileSessionToken = record.profileSessionToken;
-  const profile = parseSave(record.profile);
-  const character = record.character === undefined || record.character === null ? undefined : parseSave(record.character);
+function parseAccountEnvelope(value: unknown): AccountEnvelope {
+  const record = parseObject(value, "Account response");
+  const accountId = record.accountId;
+  const accountSessionToken = record.accountSessionToken;
+  const account = parseAccount(record.account ?? record);
+  const slot = record.slot === undefined || record.slot === null ? undefined : parseAccountSlot(record.slot);
   const syncPolicy = record.syncPolicy === undefined ? undefined : parseSyncPolicy(record.syncPolicy);
 
-  if (typeof profileSaveId !== "string" || profileSaveId.trim() === "") {
-    throw new PersistlyConfigurationError("Profile response profileSaveId must be a non-empty string.");
+  if (typeof accountId !== "string" || accountId.trim() === "") {
+    throw new PersistlyConfigurationError("Account response accountId must be a non-empty string.");
   }
 
-  if (!(profileSessionToken === undefined || typeof profileSessionToken === "string")) {
-    throw new PersistlyConfigurationError("Profile response profileSessionToken must be a string when present.");
+  if (!(accountSessionToken === undefined || typeof accountSessionToken === "string")) {
+    throw new PersistlyConfigurationError("Account response accountSessionToken must be a string when present.");
   }
 
   return {
-    profileSaveId,
-    ...(profileSessionToken === undefined ? {} : { profileSessionToken }),
-    profile,
-    ...(character === undefined ? {} : { character }),
+    accountId,
+    ...(accountSessionToken === undefined ? {} : { accountSessionToken }),
+    account,
+    ...(slot === undefined ? {} : { slot }),
     ...(syncPolicy === undefined ? {} : { syncPolicy }),
+    profile: accountToSave(account),
+    ...(slot === undefined ? {} : { character: accountSlotToSave(accountId, slot) }),
   };
 }
 
-function requireCreatedProfileEnvelope(envelope: ProfileEnvelope): CreatedProfileEnvelope {
-  if (typeof envelope.profileSessionToken !== "string" || envelope.profileSessionToken.trim() === "") {
-    throw new PersistlyConfigurationError("Create profile response must include a non-empty profileSessionToken.");
+function requireCreatedAccountEnvelope(envelope: AccountEnvelope): CreatedAccountEnvelope {
+  if (typeof envelope.accountSessionToken !== "string" || envelope.accountSessionToken.trim() === "") {
+    throw new PersistlyConfigurationError("Create account response must include a non-empty accountSessionToken.");
   }
   if (envelope.syncPolicy === undefined) {
-    throw new PersistlyConfigurationError("Create profile response must include syncPolicy.");
+    throw new PersistlyConfigurationError("Create account response must include syncPolicy.");
   }
 
   return {
     ...envelope,
-    profileSessionToken: envelope.profileSessionToken,
+    accountSessionToken: envelope.accountSessionToken,
     syncPolicy: envelope.syncPolicy,
   };
 }
 
-function requireProfileCharacterEnvelope(envelope: ProfileEnvelope): ProfileCharacterEnvelope {
-  if (envelope.character === undefined) {
-    throw new PersistlyConfigurationError("Create profile character response must include the character save.");
+function requireAccountSlotEnvelope(envelope: AccountEnvelope): AccountSlotEnvelope {
+  if (envelope.slot === undefined) {
+    throw new PersistlyConfigurationError("Create account slot response must include the slot.");
   }
 
   return {
     ...envelope,
-    character: envelope.character,
+    slot: envelope.slot,
+    character: accountSlotToSave(envelope.accountId, envelope.slot),
+  };
+}
+
+function parseAccount(value: unknown): Account {
+  const record = parseObject(value, "Account");
+  const slots = record.slots;
+  const version = record.version;
+
+  if (typeof record.accountId !== "string" || record.accountId.trim() === "") {
+    throw new PersistlyConfigurationError("Account.accountId must be a non-empty string.");
+  }
+  if (!(slots === undefined || Array.isArray(slots))) {
+    throw new PersistlyConfigurationError("Account.slots must be an array when present.");
+  }
+  if (!(version === undefined || (typeof version === "number" && Number.isInteger(version) && version >= 1))) {
+    throw new PersistlyConfigurationError("Account.version must be a positive integer when present.");
+  }
+
+  return {
+    accountId: record.accountId,
+    accountData: parseObject(record.accountData ?? {}, "Account.accountData"),
+    slots: (slots ?? []).map((slot, index) => parseAccountSlotSummary(slot, `Account.slots[${index}]`)),
+    ...(version === undefined ? {} : { version }),
+  };
+}
+
+function parseAccountSlotSummary(value: unknown, label: string): AccountSlotSummary {
+  const record = parseObject(value, label);
+  const version = record.version;
+  const status = record.status;
+  const updatedAt = record.updatedAt;
+
+  if (typeof record.slotId !== "string" || record.slotId.trim() === "") {
+    throw new PersistlyConfigurationError(`${label}.slotId must be a non-empty string.`);
+  }
+  if (!(version === undefined || (typeof version === "number" && Number.isInteger(version) && version >= 1))) {
+    throw new PersistlyConfigurationError(`${label}.version must be a positive integer when present.`);
+  }
+  if (!(status === undefined || status === "active" || status === "archived")) {
+    throw new PersistlyConfigurationError(`${label}.status must be active or archived when present.`);
+  }
+  if (!(updatedAt === undefined || typeof updatedAt === "string")) {
+    throw new PersistlyConfigurationError(`${label}.updatedAt must be a string when present.`);
+  }
+
+  return {
+    slotId: record.slotId,
+    slotInfo: parseObject(record.slotInfo ?? {}, `${label}.slotInfo`),
+    ...(version === undefined ? {} : { version }),
+    ...(status === undefined ? {} : { status }),
+    ...(updatedAt === undefined ? {} : { updatedAt }),
+  };
+}
+
+function parseAccountSlot(value: unknown): AccountSlot {
+  const record = parseObject(value, "Account slot");
+
+  if (typeof record.slotId !== "string" || record.slotId.trim() === "") {
+    throw new PersistlyConfigurationError("Account slot slotId must be a non-empty string.");
+  }
+  if (typeof record.version !== "number" || !Number.isInteger(record.version) || record.version < 1) {
+    throw new PersistlyConfigurationError("Account slot version must be a positive integer.");
+  }
+  if (record.updatedAt !== undefined && typeof record.updatedAt !== "string") {
+    throw new PersistlyConfigurationError("Account slot updatedAt must be a string when present.");
+  }
+
+  return {
+    slotId: record.slotId,
+    slotInfo: parseObject(record.slotInfo ?? {}, "Account slot slotInfo"),
+    data: parseObject(record.data, "Account slot data"),
+    version: record.version,
+    saveId: String(record.saveId ?? record.slotId),
+    metadata: parseObject(record.slotInfo ?? {}, "Account slot slotInfo"),
+    state: parseObject(record.data, "Account slot data"),
+    createdAt: nowForCompat(),
+    updatedAt: record.updatedAt ?? nowForCompat(),
+    playerRef: null,
   };
 }
 
@@ -944,14 +1072,57 @@ function synthesizeSaveFromSync(input: {
   };
 }
 
-function synthesizeProfileSaveFromSync(input: {
+function accountSlotCacheId(accountId: string, slotId: string): string {
+  return `${accountId}:${slotId}`;
+}
+
+function nowForCompat(): string {
+  return new Date(0).toISOString();
+}
+
+function accountToSave(account: Account): Save {
+  const now = nowForCompat();
+  return {
+    saveId: account.accountId,
+    playerRef: null,
+    metadata: {},
+    state: {
+      schema: "persistly.account.v1",
+      accountData: cloneJsonObject(account.accountData),
+      slots: structuredClone(account.slots) as unknown as JsonObject[],
+      // Kept for older local facade internals while the public API is account-first.
+      characterSlots: structuredClone(account.slots.map((slot) => ({
+        slotKey: slot.slotId,
+        characterSaveId: accountSlotCacheId(account.accountId, slot.slotId),
+        metadata: cloneJsonObject(slot.slotInfo),
+      }))),
+    },
+    version: account.version ?? 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function accountSlotToSave(accountId: string, slot: AccountSlot): Save {
+  const now = nowForCompat();
+  return {
+    saveId: accountSlotCacheId(accountId, slot.slotId),
+    playerRef: null,
+    metadata: cloneJsonObject(slot.slotInfo),
+    state: cloneJsonObject(slot.data),
+    version: slot.version,
+    createdAt: now,
+    updatedAt: slot.updatedAt ?? now,
+  };
+}
+
+function synthesizeAccountSaveFromSync(input: {
   saveId: string;
   cached: Save | undefined;
   accountData: JsonObject | undefined;
   accountDataPatch: JsonObject | undefined;
-  metadata: JsonObject | null | undefined;
 }): Save {
-  const cachedState = input.cached ? parseObject(input.cached.state, "Cached profile state") : {};
+  const cachedState = input.cached ? parseObject(input.cached.state, "Cached account state") : {};
   const cachedAccountData = parseObject(cachedState.accountData ?? {}, "Cached profile accountData");
   const accountData =
     input.accountData === undefined
@@ -961,11 +1132,11 @@ function synthesizeProfileSaveFromSync(input: {
   return {
     saveId: input.saveId,
     playerRef: input.cached?.playerRef ?? null,
-    metadata: input.metadata === null ? {} : cloneJsonObject(input.metadata ?? input.cached?.metadata ?? {}),
+    metadata: cloneJsonObject(input.cached?.metadata ?? {}),
     state: {
-      schema: "persistly.profile.v1",
+      schema: "persistly.account.v1",
       accountData,
-      characterSlots: Array.isArray(cachedState.characterSlots) ? structuredClone(cachedState.characterSlots) : [],
+      slots: Array.isArray(cachedState.slots) ? structuredClone(cachedState.slots) : [],
     },
     version: 1,
     createdAt: input.cached?.createdAt ?? new Date(0).toISOString(),
@@ -1002,24 +1173,60 @@ function isSyncConflictPayload(value: unknown): boolean {
   return typeof value === "object" && value !== null && (value as { status?: unknown }).status === "conflict";
 }
 
-function validateProfileCreatePayload(payload: CreateProfileInput): void {
+function validateAccountCreatePayload(payload: CreateAccountInput): void {
   validatePayloadLimits({
-    ...(payload.profileMetadata === undefined ? {} : { metadata: payload.profileMetadata }),
     ...(payload.accountData === undefined ? {} : { state: payload.accountData }),
   });
+  if (payload.slot) {
+    assertSlotId(payload.slot.slotId, "createAccount.slot");
+    validatePayloadLimits({ metadata: payload.slot.slotInfo ?? {}, state: payload.slot.data });
+  }
   if (payload.character) {
-    requireProfileCharacterSlotMetadata(payload.character.metadata, "createProfile.character.metadata");
-    validatePayloadLimits(payload.character);
+    validatePayloadLimits({ metadata: payload.character.metadata, state: payload.character.state });
   }
 }
 
-function validateSyncProfileAccountDataPayload(payload: SyncProfileAccountDataInput): void {
-  if (payload.accountData !== undefined && payload.accountDataPatch !== undefined) {
-    throw new PersistlyConfigurationError("syncProfileAccountData accepts either accountData or accountDataPatch, not both.");
+function normalizeCreateAccountPayload(payload: CreateAccountInput): Record<string, unknown> {
+  const slot = payload.slot ?? (payload.character === undefined
+    ? undefined
+    : {
+        slotId: readSlotIdFromSlotInfo(payload.character.metadata),
+        slotInfo: stripPersistlySlotInfo(payload.character.metadata),
+        data: payload.character.state,
+      });
+
+  return {
+    ...(payload.playerRef === undefined ? {} : { playerRef: payload.playerRef }),
+    ...(payload.externalAccountRef === undefined && payload.externalProfileRef === undefined
+      ? {}
+      : { externalAccountRef: payload.externalAccountRef ?? payload.externalProfileRef }),
+    ...(payload.accountData === undefined ? {} : { accountData: payload.accountData }),
+    ...(slot === undefined ? {} : { slot }),
+  };
+}
+
+function readSlotIdFromSlotInfo(slotInfo: JsonObject): string {
+  const persistly = parseObject(slotInfo._persistly, "slotInfo._persistly");
+  const slotId = persistly.slotKey ?? persistly.slotId;
+  if (typeof slotId !== "string") {
+    throw new PersistlyConfigurationError("slotInfo._persistly.slotId must be a string.");
   }
-  if (payload.accountData === undefined && payload.accountDataPatch === undefined && !("metadata" in payload)) {
+  return slotId;
+}
+
+function stripPersistlySlotInfo(slotInfo: JsonObject): JsonObject {
+  const clean = cloneJsonObject(slotInfo);
+  delete clean._persistly;
+  return clean;
+}
+
+function validateSyncAccountDataPayload(payload: SyncAccountDataInput): void {
+  if (payload.accountData !== undefined && payload.accountDataPatch !== undefined) {
+    throw new PersistlyConfigurationError("syncAccountData accepts either accountData or accountDataPatch, not both.");
+  }
+  if (payload.accountData === undefined && payload.accountDataPatch === undefined) {
     throw new PersistlyConfigurationError(
-      "syncProfileAccountData requires accountData, accountDataPatch, or metadata.",
+      "syncAccountData requires accountData or accountDataPatch.",
     );
   }
 }
@@ -1096,9 +1303,9 @@ function isPersistlyErrorCode(value: unknown): value is PersistlyErrorCode {
     value === "not_found" ||
     value === "conflict" ||
     value === "slot_already_exists" ||
-    value === "character_archived" ||
-    value === "profile_deleted" ||
-    value === "character_deleted" ||
+    value === "slot_archived" ||
+    value === "account_deleted" ||
+    value === "slot_deleted" ||
     value === "rate_limited" ||
     value === "payload_too_large" ||
     value === "server_error"

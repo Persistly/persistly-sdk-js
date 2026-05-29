@@ -30,6 +30,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./account": {
+      "types": "./dist/account.d.ts",
+      "default": "./dist/account.js"
+    },
     "./autosave": {
       "types": "./dist/autosave.d.ts",
       "default": "./dist/autosave.js"
@@ -53,10 +57,6 @@
     "./local-storage-cache": {
       "types": "./dist/local-storage-cache.d.ts",
       "default": "./dist/local-storage-cache.js"
-    },
-    "./profile": {
-      "types": "./dist/profile.d.ts",
-      "default": "./dist/profile.js"
     },
     "./schema": {
       "types": "./dist/schema.d.ts",

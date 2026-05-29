@@ -4,9 +4,11 @@ await PersistlyGameSaves.configure({
   runtimeKey: "ps_test_replace_me",
 });
 
-const result = await PersistlyGameSaves.shared.saveSlot("autosave", {
+const result = await PersistlyGameSaves.shared.saveData({
   level: 5,
   coins: 1200,
+}, {
+  slotInfo: { characterName: "Astra", level: 5 },
 });
 
 if (result.status === PersistlyGameSaveStatus.LocalSaved) {

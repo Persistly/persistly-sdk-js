@@ -34,6 +34,7 @@ import type { PersistlyErrorPayload } from "@persistlyapp/sdk";
 import type { JsonObject, SaveSnapshot } from "@persistlyapp/sdk/cache";
 import type { RuntimeConfig } from "@persistlyapp/sdk/client";
 import type { LocalStorageLike } from "@persistlyapp/sdk/local-storage-cache";
+import type { PersistlyAccountState } from "@persistlyapp/sdk/account";
 
 const policy: SyncPolicy = {
   minRemoteSyncIntervalSeconds: 60,
@@ -57,6 +58,7 @@ const object: JsonObject = { ok: true };
 const errorPayload: PersistlyErrorPayload = { error: { code: "invalid_request", message: "smoke" } };
 const runtimeConfig: RuntimeConfig | undefined = undefined;
 const localStorageLike: LocalStorageLike | undefined = undefined;
+const accountState: PersistlyAccountState | undefined = undefined;
 
 void policy;
 void snapshot;
@@ -64,6 +66,7 @@ void object;
 void errorPayload;
 void runtimeConfig;
 void localStorageLike;
+void accountState;
 void PersistlyClient;
 void PersistlyGameSaves;
 void LocalStorageSaveCache;
@@ -72,13 +75,13 @@ void PersistlySyncStatus.Accepted;
 `,
 );
 const subpaths = [
+  "@persistlyapp/sdk/account",
   "@persistlyapp/sdk/autosave",
   "@persistlyapp/sdk/cache",
   "@persistlyapp/sdk/client",
   "@persistlyapp/sdk/file-cache",
   "@persistlyapp/sdk/game-saves",
   "@persistlyapp/sdk/local-storage-cache",
-  "@persistlyapp/sdk/profile",
   "@persistlyapp/sdk/schema",
 ];
 await writeFile(

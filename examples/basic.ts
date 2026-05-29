@@ -11,38 +11,27 @@ const client = new PersistlyClient({
   cache: new MemorySaveCache(),
 });
 
-const created = await client.createProfile({
+const created = await client.createAccount({
   playerRef: "example-player",
   accountData: { diamonds: 0, tutorialComplete: false },
-  character: {
-    metadata: { _persistly: { slotKey: "main" }, characterName: "Ayla" },
-    state: { gold: 100, level: 1 },
+  slot: {
+    slotId: "main",
+    slotInfo: { characterName: "Ayla" },
+    data: { gold: 100, level: 1 },
   },
 });
 
-// Store the profile session in your own trusted account backend or durable local save store.
-// Do not log or expose profileSessionToken in player UI, telemetry, or support screenshots.
-const profileSaveId = created.profileSaveId;
-const profileSessionToken = created.profileSessionToken;
-const characterSaveId = created.character?.saveId;
-
-if (!created.character || !characterSaveId) {
-  throw new Error("Expected example profile creation to include an initial character.");
-}
-
-const updated = await client.syncProfileCharacter({
-  profileSaveId,
-  profileSessionToken,
-  characterSaveId,
-  baseVersion: created.character.version,
-  metadata: created.character.metadata,
-  state: { gold: 125, level: 2 },
+const updated = await client.syncAccountSlot({
+  accountId: created.accountId,
+  accountSessionToken: created.accountSessionToken,
+  slotId: "main",
+  baseVersion: created.slot?.version,
+  slotInfo: { characterName: "Ayla", level: 2 },
+  data: { gold: 125, level: 2 },
 });
-
-const local = await client.getLocal(characterSaveId);
 
 if (updated.status === PersistlySyncStatus.Accepted) {
   await client.updateLocal(updated.save);
 }
 
-console.log(updated.status, updated.save.version, local?.version);
+console.log(updated.status, updated.save.version);

@@ -5,10 +5,12 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
-const bundleRoot = path.join(repoRoot, "contracts", "persistly-contract-v0.3.0");
+const preferredBundleRoot = path.join(repoRoot, "contracts", "persistly-contract-v0.4.0");
+const fallbackBundleRoot = path.join(repoRoot, "contracts", "persistly-contract-v0.3.0");
+const bundleRoot = await directoryExists(preferredBundleRoot) ? preferredBundleRoot : fallbackBundleRoot;
 const manifestPath = path.join(bundleRoot, "manifest.json");
-const expectedBundle = "persistly-contract-v0.3.0";
-const expectedVersion = "v0.3.0";
+const expectedBundle = path.basename(bundleRoot);
+const expectedVersion = expectedBundle.replace("persistly-contract-", "");
 const expectedSchemaVersion = 1;
 const expectedExampleSet = "strict";
 const requiredPaths = new Set([
@@ -89,7 +91,21 @@ if (unexpectedFiles.length > 0) {
   throw new Error(`Contract bundle contains unexpected files: ${unexpectedFiles.join(", ")}`);
 }
 
-console.log("Contract bundle persistly-contract-v0.3.0 is present and matches manifest integrity metadata.");
+if (expectedBundle === "persistly-contract-v0.4.0") {
+  const openapi = await readFile(path.join(bundleRoot, "openapi", "persistly-api.yaml"), "utf8");
+  for (const accountPath of ["/api/v1/accounts", "/api/v1/accounts/{accountId}/slots/{slotId}/sync"]) {
+    if (!openapi.includes(accountPath)) {
+      throw new Error(`Contract OpenAPI is missing account path ${accountPath}.`);
+    }
+  }
+  if (openapi.includes("/api/v1/profiles") || openapi.includes("X-Persistly-Profile-Session")) {
+    throw new Error("Contract OpenAPI must not expose profile routes or profile session headers.");
+  }
+} else {
+  console.warn("Contract bundle persistly-contract-v0.4.0 is not present; validated existing v0.3.0 bundle integrity only.");
+}
+
+console.log(`Contract bundle ${expectedBundle} is present and matches manifest integrity metadata.`);
 
 async function listBundleFiles(root, relativePath = "") {
   const entries = await readdir(path.join(root, relativePath), { withFileTypes: true });
@@ -109,4 +125,13 @@ async function listBundleFiles(root, relativePath = "") {
   }
 
   return files;
+}
+
+async function directoryExists(directory) {
+  try {
+    await readdir(directory);
+    return true;
+  } catch {
+    return false;
+  }
 }

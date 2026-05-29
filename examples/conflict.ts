@@ -11,42 +11,34 @@ const client = new PersistlyClient({
   cache: new MemorySaveCache(),
 });
 
-const created = await client.createProfile({
+const created = await client.createAccount({
   playerRef: "example-player",
   accountData: { diamonds: 0 },
-  character: {
-    metadata: { _persistly: { slotKey: "main" }, characterName: "Ayla" },
-    state: { gold: 100, level: 1 },
+  slot: {
+    slotId: "main",
+    slotInfo: { characterName: "Ayla" },
+    data: { gold: 100, level: 1 },
   },
 });
 
-if (!created.character) {
-  throw new Error("Expected example profile creation to include an initial character.");
-}
+const staleVersion = created.slot?.version ?? 1;
 
-const staleVersion = created.character.version;
-// Direct profile APIs require the session token created for this profile.
-// Do not log or expose profileSessionToken in player UI, telemetry, or support screenshots.
-const profileSaveId = created.profileSaveId;
-const profileSessionToken = created.profileSessionToken;
-const characterSaveId = created.character.saveId;
-
-await client.syncProfileCharacter({
-  profileSaveId,
-  profileSessionToken,
-  characterSaveId,
-  baseVersion: created.character.version,
-  metadata: created.character.metadata,
-  state: { gold: 140, level: 3 },
+await client.syncAccountSlot({
+  accountId: created.accountId,
+  accountSessionToken: created.accountSessionToken,
+  slotId: "main",
+  baseVersion: staleVersion,
+  slotInfo: { characterName: "Ayla", level: 3 },
+  data: { gold: 140, level: 3 },
 });
 
-const conflict = await client.syncProfileCharacter({
-  profileSaveId,
-  profileSessionToken,
-  characterSaveId,
+const conflict = await client.syncAccountSlot({
+  accountId: created.accountId,
+  accountSessionToken: created.accountSessionToken,
+  slotId: "main",
   baseVersion: staleVersion,
-  metadata: created.character.metadata,
-  state: { gold: 999, level: 99 },
+  slotInfo: { characterName: "Ayla", level: 99 },
+  data: { gold: 999, level: 99 },
 });
 
 if (conflict.status === PersistlySyncStatus.Conflict) {
