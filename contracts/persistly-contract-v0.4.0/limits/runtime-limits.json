@@ -1,0 +1,89 @@
+{
+  "metadataMaxBytes": 16384,
+  "stateMaxBytes": 262144,
+  "planLimits": {
+    "free": {
+      "monthlyRuntimeRequests": 100000,
+      "prodRuntimeRequestsPerMinute": 60,
+      "stageRuntimeRequestsPerMinute": 20,
+      "burstCapacityRequests": 120,
+      "storageQuotaBytes": 1073741824,
+      "restoreHistoryDays": 1,
+      "normalSnapshotIntervalSeconds": 1800,
+      "maxNormalSnapshotsPerCharacter": 24,
+      "accountDataMaxBytes": 262144,
+      "characterStateMaxBytes": 262144,
+      "metadataMaxBytes": 16384,
+      "gameConfigMaxBytes": 16384
+    },
+    "starter": {
+      "monthlyRuntimeRequests": 1000000,
+      "prodRuntimeRequestsPerMinute": 300,
+      "stageRuntimeRequestsPerMinute": 60,
+      "burstCapacityRequests": 600,
+      "storageQuotaBytes": 26843545600,
+      "restoreHistoryDays": 7,
+      "normalSnapshotIntervalSeconds": 600,
+      "maxNormalSnapshotsPerCharacter": 100,
+      "accountDataMaxBytes": 524288,
+      "characterStateMaxBytes": 524288,
+      "metadataMaxBytes": 32768,
+      "gameConfigMaxBytes": 32768
+    },
+    "growth": {
+      "monthlyRuntimeRequests": 5000000,
+      "prodRuntimeRequestsPerMinute": 1200,
+      "stageRuntimeRequestsPerMinute": 120,
+      "burstCapacityRequests": 2400,
+      "storageQuotaBytes": 107374182400,
+      "restoreHistoryDays": 30,
+      "normalSnapshotIntervalSeconds": 300,
+      "maxNormalSnapshotsPerCharacter": 300,
+      "accountDataMaxBytes": 1048576,
+      "characterStateMaxBytes": 1048576,
+      "metadataMaxBytes": 65536,
+      "gameConfigMaxBytes": 65536
+    },
+    "pro": {
+      "monthlyRuntimeRequests": 20000000,
+      "prodRuntimeRequestsPerMinute": 3000,
+      "stageRuntimeRequestsPerMinute": 300,
+      "burstCapacityRequests": 6000,
+      "storageQuotaBytes": 536870912000,
+      "restoreHistoryDays": 90,
+      "normalSnapshotIntervalSeconds": 60,
+      "maxNormalSnapshotsPerCharacter": 1000,
+      "accountDataMaxBytes": 2097152,
+      "characterStateMaxBytes": 2097152,
+      "metadataMaxBytes": 131072,
+      "gameConfigMaxBytes": 131072
+    },
+    "creator_demo": {
+      "monthlyRuntimeRequests": 100000,
+      "prodRuntimeRequestsPerMinute": 100,
+      "stageRuntimeRequestsPerMinute": 30,
+      "burstCapacityRequests": 200,
+      "storageQuotaBytes": 1073741824,
+      "restoreHistoryDays": 1,
+      "normalSnapshotIntervalSeconds": 1800,
+      "maxNormalSnapshotsPerCharacter": 24,
+      "accountDataMaxBytes": 262144,
+      "characterStateMaxBytes": 262144,
+      "metadataMaxBytes": 16384,
+      "gameConfigMaxBytes": 16384
+    }
+  },
+  "errorCodes": [
+    "invalid_request",
+    "unauthorized",
+    "not_found",
+    "conflict",
+    "rate_limited",
+    "monthly_quota_exceeded",
+    "payload_too_large",
+    "server_error"
+  ],
+  "conflictReasons": [
+    "base_version_mismatch"
+  ]
+}

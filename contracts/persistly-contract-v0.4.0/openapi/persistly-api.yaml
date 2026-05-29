@@ -1,0 +1,1154 @@
+openapi: 3.2.0
+info:
+  title: Persistly Runtime API
+  summary: Save-sync API for account-first, offline-first game persistence.
+  description: |
+    Persistly is a narrow save-sync and persistence layer for games.
+    The public runtime API is account-first: create an account, store the
+    accountSessionToken, then sync accountData and one or more slot records.
+    It is designed for single-player, idle, incremental, async, and
+    cross-device resume flows rather than real-time multiplayer state or
+    authoritative game simulation.
+  contact:
+    name: Persistly Support
+    url: https://docs.persistly.app
+    email: support@persistly.app
+  license:
+    name: Proprietary
+    url: https://persistly.app/terms
+  version: 0.4.0
+servers:
+  - url: https://api.persistly.app
+    description: Public production runtime API
+tags:
+  - name: Operations
+    description: Public operational endpoints for availability checks.
+  - name: Accounts
+    description: Account sessions, accountData, slots, slotInfo, and slot data for player-owned save sync.
+  - name: Save Sync
+    description: Advanced create, load, and sync operations around known save IDs.
+  - name: Billing Webhooks
+    description: Provider webhook endpoints used by Persistly billing automation.
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [Operations]
+      summary: Health check
+      description: Lightweight readiness endpoint for uptime checks and deployment verification.
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                default:
+                  summary: API is healthy
+                  value:
+                    ok: true
+  /api/v1/runtime-config:
+    get:
+      operationId: getRuntimeConfig
+      tags: [Accounts]
+      summary: Get runtime config
+      description: Return SDK runtime configuration such as dashboard-controlled sync policy and the active environment game config.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - name: gameConfigVersion
+          in: query
+          required: false
+          description: Client's cached active game config version. When it matches, the response omits the config payload and marks it unchanged.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Runtime configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeConfigResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/accounts:
+    post:
+      operationId: createAccount
+      tags: [Accounts]
+      summary: Create account
+      description: Create a runtime account and one account session token. A first slot can be created in the same request by sending the optional nested slot object.
+      security:
+        - RuntimeKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountRequest'
+            examples:
+              default:
+                summary: Create an account with an autosave slot
+                value:
+                  playerRef: player-184
+                  externalAccountRef:
+                    provider: auth0
+                    subject: auth0|user_123
+                  accountData:
+                    diamonds: 1200
+                    settings:
+                      music: true
+                  slot:
+                    slotId: autosave
+                    slotInfo:
+                      characterName: Ayla
+                      className: Mage
+                      level: 5
+                    data:
+                      checkpoint: vault
+                      coins: 418
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountEnvelopeResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/accounts/{accountId}:
+    get:
+      operationId: loadAccount
+      tags: [Accounts]
+      summary: Load account
+      description: Load accountData and active slot summaries for an account session.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/AccountSession'
+      responses:
+        '200':
+          description: Account loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    delete:
+      operationId: deleteAccount
+      tags: [Accounts]
+      summary: Delete account
+      description: Permanently delete an account, revoke its account sessions, and erase all attached slots.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/AccountSession'
+      responses:
+        '200':
+          description: Account deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteAccountResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/accounts/{accountId}/data/sync:
+    post:
+      operationId: syncAccountData
+      tags: [Accounts]
+      summary: Sync accountData
+      description: Replace or shallow-patch account-wide private gameplay data with optimistic concurrency.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/AccountSession'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncAccountDataRequest'
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncAcceptedResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountConflictResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/accounts/{accountId}/slots:
+    get:
+      operationId: listAccountSlots
+      tags: [Accounts]
+      summary: List active slots
+      description: Return active slot summaries for account selection screens. Full slot data is loaded from the slot route.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/AccountSession'
+      responses:
+        '200':
+          description: Active slots
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accountId, slots]
+                properties:
+                  accountId:
+                    type: string
+                    pattern: ^acc_[A-Za-z0-9_.-]+$
+                  slots:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AccountSlotSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    post:
+      operationId: createAccountSlot
+      tags: [Accounts]
+      summary: Create slot
+      description: Create a named active slot under an account. Archived slots do not reserve slotId values.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/AccountSession'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccountSlotRequest'
+      responses:
+        '201':
+          description: Slot created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/SlotAlreadyExists'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/accounts/{accountId}/slots/{slotId}:
+    get:
+      operationId: loadAccountSlot
+      tags: [Accounts]
+      summary: Load slot
+      description: Load one active slot's slotInfo and full playable data.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/SlotId'
+        - $ref: '#/components/parameters/AccountSession'
+      responses:
+        '200':
+          description: Slot loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    delete:
+      operationId: deleteAccountSlot
+      tags: [Accounts]
+      summary: Delete slot
+      description: Permanently delete one slot under an account.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/SlotId'
+        - $ref: '#/components/parameters/AccountSession'
+      responses:
+        '200':
+          description: Slot deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteSlotResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/accounts/{accountId}/slots/{slotId}/sync:
+    post:
+      operationId: syncAccountSlot
+      tags: [Accounts]
+      summary: Sync slot
+      description: Sync an active slot's slotInfo and data with optimistic concurrency.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/SlotId'
+        - $ref: '#/components/parameters/AccountSession'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncAccountSlotRequest'
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncAcceptedResponse'
+        '409':
+          description: Conflict or archived slot
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/SlotConflictResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                archived:
+                  summary: Archived slot cannot be synced
+                  value:
+                    error:
+                      code: slot_archived
+                      message: Archived slots cannot be synced.
+                      details:
+                        slotId: autosave
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/accounts/{accountId}/slots/{slotId}/archive:
+    post:
+      operationId: archiveAccountSlot
+      tags: [Accounts]
+      summary: Archive slot
+      description: Retire one active slot. Archived slots are not returned by active slot routes and cannot be synced through the normal slot sync route.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/SlotId'
+        - $ref: '#/components/parameters/AccountSession'
+      responses:
+        '200':
+          description: Slot archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/saves:
+    post:
+      operationId: createSave
+      tags: [Save Sync]
+      summary: Create save
+      description: Advanced lower-level operation for direct integrations that intentionally manage save ownership outside the account facade.
+      security:
+        - RuntimeKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSaveRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveEnvelopeResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/saves/{saveId}:
+    get:
+      operationId: loadSave
+      tags: [Save Sync]
+      summary: Load save
+      description: Advanced lower-level load for a known saveId.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - name: saveId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaveEnvelopeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/saves/{saveId}/sync:
+    post:
+      operationId: syncSave
+      tags: [Save Sync]
+      summary: Sync save
+      description: Advanced lower-level sync for a known saveId using baseVersion for optimistic concurrency.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - name: saveId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncSaveRequest'
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncAcceptedResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncConflictResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /webhooks/stripe:
+    post:
+      operationId: handleStripeWebhook
+      tags: [Billing Webhooks]
+      summary: Stripe webhook
+      description: Receives signed Stripe events and updates Persistly billing state and plan entitlements.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Event accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [received]
+                properties:
+                  received:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '500':
+          $ref: '#/components/responses/ServerError'
+components:
+  securitySchemes:
+    RuntimeKey:
+      type: http
+      scheme: bearer
+  parameters:
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^acc_[A-Za-z0-9_.-]+$
+    SlotId:
+      name: slotId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[A-Za-z0-9_.-]{1,64}$
+    AccountSession:
+      name: X-Persistly-Account-Session
+      in: header
+      required: true
+      schema:
+        type: string
+      description: Per-device account session token returned when an account is created.
+  schemas:
+    HealthResponse:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+    Save:
+      type: object
+      required: [saveId, playerRef, metadata, state, version, createdAt, updatedAt]
+      properties:
+        saveId:
+          type: string
+        playerRef:
+          type: [string, "null"]
+          description: Optional developer-owned, non-secret player/account reference. It is not an authentication identity and is not queryable through the public runtime API.
+        metadata:
+          type: object
+          x-max-bytes: 16384
+          additionalProperties: true
+        state:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+        version:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateSaveRequest:
+      type: object
+      required: [state]
+      properties:
+        playerRef:
+          type: string
+        metadata:
+          type: object
+          x-max-bytes: 16384
+          additionalProperties: true
+        state:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+    SyncSaveRequest:
+      type: object
+      required: [baseVersion, state]
+      properties:
+        baseVersion:
+          type: integer
+          minimum: 1
+        metadata:
+          type: object
+          x-max-bytes: 16384
+          additionalProperties: true
+        state:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+    ExternalAccountRef:
+      type: object
+      required: [provider, subject]
+      description: Optional non-authoritative identity reference stored for future trusted auth migration. It is not public lookup or proof of ownership.
+      properties:
+        provider:
+          type: string
+        subject:
+          type: string
+    SyncPolicy:
+      type: object
+      required: [minRemoteSyncIntervalSeconds, forceSyncCooldownSeconds, syncOnAppBackground, syncOnAppForeground, syncOnReconnect, maxQueuedLocalSnapshots]
+      properties:
+        minRemoteSyncIntervalSeconds:
+          type: integer
+          minimum: 1
+        forceSyncCooldownSeconds:
+          type: integer
+          minimum: 1
+        syncOnAppBackground:
+          type: boolean
+        syncOnAppForeground:
+          type: boolean
+        syncOnReconnect:
+          type: boolean
+        maxQueuedLocalSnapshots:
+          type: integer
+          minimum: 1
+    RuntimeConfigResponse:
+      type: object
+      required: [syncPolicy]
+      properties:
+        syncPolicy:
+          $ref: '#/components/schemas/SyncPolicy'
+        gameConfig:
+          $ref: '#/components/schemas/GameConfig'
+    GameConfig:
+      type: object
+      required: [enabled, version, sizeBytes]
+      properties:
+        enabled:
+          type: boolean
+        unchanged:
+          type: boolean
+        version:
+          type: integer
+          minimum: 0
+        checksum:
+          type: string
+        sizeBytes:
+          type: integer
+          minimum: 0
+        publishedAt:
+          type: string
+          format: date-time
+        data:
+          type: object
+          additionalProperties: true
+    CreateAccountRequest:
+      type: object
+      properties:
+        playerRef:
+          type: string
+          description: Optional non-secret developer reference. It is not public lookup or auth.
+        externalAccountRef:
+          $ref: '#/components/schemas/ExternalAccountRef'
+        accountData:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+        slot:
+          $ref: '#/components/schemas/CreateAccountInitialSlot'
+    CreateAccountInitialSlot:
+      type: object
+      required: [slotId, data]
+      properties:
+        slotId:
+          type: string
+          pattern: ^[A-Za-z0-9_.-]{1,64}$
+        slotInfo:
+          type: object
+          x-max-bytes: 16384
+          additionalProperties: true
+        data:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+    CreateAccountSlotRequest:
+      type: object
+      required: [slotId, data]
+      properties:
+        slotId:
+          type: string
+          pattern: ^[A-Za-z0-9_.-]{1,64}$
+        slotInfo:
+          type: object
+          x-max-bytes: 16384
+          additionalProperties: true
+        data:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+    SyncAccountDataRequest:
+      type: object
+      required: [baseVersion]
+      description: Exactly one of accountData or accountDataPatch may be present.
+      properties:
+        baseVersion:
+          type: integer
+          minimum: 1
+        accountData:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+        accountDataPatch:
+          type: object
+          x-max-bytes: 262144
+          description: Shallow top-level patch. Null values remove top-level keys.
+          additionalProperties: true
+    SyncAccountSlotRequest:
+      type: object
+      required: [baseVersion, data]
+      properties:
+        baseVersion:
+          type: integer
+          minimum: 1
+        slotInfo:
+          type: object
+          x-max-bytes: 16384
+          additionalProperties: true
+        data:
+          type: object
+          x-max-bytes: 262144
+          additionalProperties: true
+    AccountSlotSummary:
+      type: object
+      required: [slotId, slotInfo, version, status, updatedAt]
+      properties:
+        slotId:
+          type: string
+        slotInfo:
+          type: object
+          additionalProperties: true
+        version:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [active]
+        updatedAt:
+          type: string
+          format: date-time
+    AccountResponse:
+      type: object
+      required: [accountId, accountData, slots, version]
+      properties:
+        accountId:
+          type: string
+          pattern: ^acc_[A-Za-z0-9_.-]+$
+        accountData:
+          type: object
+          additionalProperties: true
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountSlotSummary'
+        version:
+          type: integer
+          minimum: 1
+    SlotResponse:
+      type: object
+      required: [slotId, slotInfo, data, version, status, updatedAt]
+      properties:
+        slotId:
+          type: string
+        slotInfo:
+          type: object
+          additionalProperties: true
+        data:
+          type: object
+          additionalProperties: true
+        version:
+          type: integer
+          minimum: 1
+        status:
+          type: string
+          enum: [active]
+        updatedAt:
+          type: string
+          format: date-time
+    AccountEnvelopeResponse:
+      type: object
+      required: [accountId, accountSessionToken, account, syncPolicy]
+      properties:
+        accountId:
+          type: string
+          pattern: ^acc_[A-Za-z0-9_.-]+$
+        accountSessionToken:
+          type: string
+          description: Returned only on account creation. Store locally; it authorizes access only to this account and its slots.
+        account:
+          $ref: '#/components/schemas/AccountResponse'
+        slot:
+          $ref: '#/components/schemas/SlotResponse'
+        syncPolicy:
+          $ref: '#/components/schemas/SyncPolicy'
+    DeleteSlotResponse:
+      type: object
+      required: [accountId, slotId, deletedAt, alreadyDeleted, cleanupQueued]
+      properties:
+        accountId:
+          type: string
+        slotId:
+          type: string
+        deletedAt:
+          type: string
+          format: date-time
+        alreadyDeleted:
+          type: boolean
+        cleanupQueued:
+          type: boolean
+        account:
+          $ref: '#/components/schemas/AccountResponse'
+    DeleteAccountResponse:
+      type: object
+      required: [accountId, deletedAt, deletedSlotCount, alreadyDeleted, cleanupQueued]
+      properties:
+        accountId:
+          type: string
+        deletedAt:
+          type: string
+          format: date-time
+        deletedSlotCount:
+          type: integer
+          minimum: 0
+        alreadyDeleted:
+          type: boolean
+        cleanupQueued:
+          type: boolean
+    SyncAcceptedResponse:
+      type: object
+      required: [status, version, updatedAt, historyRetained]
+      properties:
+        status:
+          type: string
+          enum: [accepted]
+        version:
+          type: integer
+          minimum: 1
+        updatedAt:
+          type: string
+          format: date-time
+        historyRetained:
+          type: boolean
+        warnings:
+          type: array
+          items:
+            type: string
+    SyncConflictResponse:
+      type: object
+      required: [status, save, details]
+      properties:
+        status:
+          type: string
+          enum: [conflict]
+        save:
+          $ref: '#/components/schemas/Save'
+        details:
+          $ref: '#/components/schemas/ConflictDetails'
+    AccountConflictResponse:
+      type: object
+      required: [status, account, details]
+      properties:
+        status:
+          type: string
+          enum: [conflict]
+        account:
+          $ref: '#/components/schemas/AccountResponse'
+        details:
+          $ref: '#/components/schemas/ConflictDetails'
+    SlotConflictResponse:
+      type: object
+      required: [status, slot, details]
+      properties:
+        status:
+          type: string
+          enum: [conflict]
+        slot:
+          $ref: '#/components/schemas/SlotResponse'
+        details:
+          $ref: '#/components/schemas/ConflictDetails'
+    ConflictDetails:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          enum: [base_version_mismatch]
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, slot_archived, account_deleted, slot_deleted, rate_limited, monthly_quota_exceeded, payload_too_large, server_error]
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+  responses:
+    InvalidRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Invalid request body
+              value:
+                error:
+                  code: invalid_request
+                  message: Request body is invalid.
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Missing or invalid runtime key
+              value:
+                error:
+                  code: unauthorized
+                  message: Runtime key is invalid or missing.
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Resource not found
+              value:
+                error:
+                  code: not_found
+                  message: Resource not found.
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Account session cannot access this resource
+              value:
+                error:
+                  code: forbidden
+                  message: Account session cannot access this resource.
+    Gone:
+      description: Deleted resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            accountDeleted:
+              summary: Account was deleted
+              value:
+                error:
+                  code: account_deleted
+                  message: Account was deleted.
+                  details:
+                    accountId: acc_01HXYZ
+            slotDeleted:
+              summary: Slot was deleted
+              value:
+                error:
+                  code: slot_deleted
+                  message: Slot was deleted.
+                  details:
+                    slotId: autosave
+    SlotAlreadyExists:
+      description: Slot already exists
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Duplicate active slot
+              value:
+                error:
+                  code: slot_already_exists
+                  message: An active slot already exists for this slotId.
+                  details:
+                    slotId: autosave
+    PayloadTooLarge:
+      description: Payload too large
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Data exceeds size limit
+              value:
+                error:
+                  code: payload_too_large
+                  message: Data exceeds the maximum allowed size.
+                  details:
+                    field: data
+                    maxBytes: 262144
+    PaymentRequired:
+      description: Monthly runtime quota exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            monthlyQuotaExceeded:
+              summary: Monthly runtime quota exceeded
+              value:
+                error:
+                  code: monthly_quota_exceeded
+                  message: Monthly runtime request quota exceeded.
+                  details:
+                    planTier: free
+                    used: 100000
+                    limit: 100000
+    RateLimited:
+      description: Rate limited
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Rate limit exceeded
+              value:
+                error:
+                  code: rate_limited
+                  message: Too many requests. Try again later.
+    ServerError:
+      description: Server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Unexpected server error
+              value:
+                error:
+                  code: server_error
+                  message: Unexpected server error.

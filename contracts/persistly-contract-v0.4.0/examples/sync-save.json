@@ -1,0 +1,12 @@
+{
+  "baseVersion": 1,
+  "slotInfo": {
+    "characterName": "Ayla",
+    "className": "Mage",
+    "level": 6
+  },
+  "data": {
+    "checkpoint": "reactor",
+    "coins": 612
+  }
+}

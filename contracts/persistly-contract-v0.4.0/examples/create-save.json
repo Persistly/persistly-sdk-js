@@ -1,0 +1,21 @@
+{
+  "playerRef": "player-184",
+  "accountData": {
+    "diamonds": 1200,
+    "settings": {
+      "music": true
+    }
+  },
+  "slot": {
+    "slotId": "autosave",
+    "slotInfo": {
+      "characterName": "Ayla",
+      "className": "Mage",
+      "level": 5
+    },
+    "data": {
+      "checkpoint": "vault",
+      "coins": 418
+    }
+  }
+}

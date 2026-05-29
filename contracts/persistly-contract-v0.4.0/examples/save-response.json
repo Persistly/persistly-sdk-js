@@ -1,0 +1,50 @@
+{
+  "accountId": "acc_01HXYZ",
+  "accountSessionToken": "pst_01HSESSION",
+  "account": {
+    "accountId": "acc_01HXYZ",
+    "accountData": {
+      "diamonds": 1200,
+      "settings": {
+        "music": true
+      }
+    },
+    "slots": [
+      {
+        "slotId": "autosave",
+        "slotInfo": {
+          "characterName": "Ayla",
+          "className": "Mage",
+          "level": 5
+        },
+        "version": 1,
+        "status": "active",
+        "updatedAt": "2026-05-29T12:00:00Z"
+      }
+    ],
+    "version": 1
+  },
+  "slot": {
+    "slotId": "autosave",
+    "slotInfo": {
+      "characterName": "Ayla",
+      "className": "Mage",
+      "level": 5
+    },
+    "data": {
+      "checkpoint": "vault",
+      "coins": 418
+    },
+    "version": 1,
+    "status": "active",
+    "updatedAt": "2026-05-29T12:00:00Z"
+  },
+  "syncPolicy": {
+    "minRemoteSyncIntervalSeconds": 60,
+    "forceSyncCooldownSeconds": 10,
+    "syncOnAppBackground": true,
+    "syncOnAppForeground": true,
+    "syncOnReconnect": true,
+    "maxQueuedLocalSnapshots": 25
+  }
+}

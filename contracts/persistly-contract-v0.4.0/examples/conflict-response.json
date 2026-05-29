@@ -1,0 +1,21 @@
+{
+  "status": "conflict",
+  "slot": {
+    "slotId": "autosave",
+    "slotInfo": {
+      "characterName": "Ayla",
+      "className": "Mage",
+      "level": 7
+    },
+    "data": {
+      "checkpoint": "sky-bridge",
+      "coins": 900
+    },
+    "version": 3,
+    "status": "active",
+    "updatedAt": "2026-05-29T12:05:00Z"
+  },
+  "details": {
+    "reason": "base_version_mismatch"
+  }
+}

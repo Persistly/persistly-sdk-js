@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const sourceRoot = path.resolve(import.meta.dirname, "..");
+const activeBundle = "persistly-contract-v0.4.0";
 
 test("validate-contract rejects unexpected extra files in the pinned bundle", async () => {
   const sandboxRoot = await mkdtemp(path.join(tmpdir(), "persistly-sdk-js-validate-"));
@@ -19,7 +20,7 @@ test("validate-contract rejects unexpected extra files in the pinned bundle", as
       path.join(
         sandboxRoot,
         "contracts",
-        "persistly-contract-v0.3.0",
+        activeBundle,
         "examples",
         "unexpected.json",
       ),
@@ -46,7 +47,7 @@ test("validate-contract asserts the pinned manifest metadata", async () => {
     const manifestPath = path.join(
       sandboxRoot,
       "contracts",
-      "persistly-contract-v0.3.0",
+      activeBundle,
       "manifest.json",
     );
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
