@@ -84,6 +84,12 @@ await PersistlyGameSaves.shared.forceSyncAccount();
 
 `patchAccountData` performs a shallow top-level merge. `null` removes a top-level key.
 
+## Templates
+
+- `templates/one-save` for idle, casual, and one-save games.
+- `templates/multi-slot` for manual saves, campaigns, and slot select screens.
+- `templates/account-slots` for games with sign-in or cross-device restore.
+
 ## Advanced Runtime Client
 
 Use `PersistlyClient` directly only for custom wrappers or advanced integrations.

@@ -69,7 +69,8 @@
     "CHANGELOG.md",
     "LICENSE",
     "SECURITY.md",
-    "contracts"
+    "contracts",
+    "templates"
   ],
   "engines": {
     "node": ">=18"
