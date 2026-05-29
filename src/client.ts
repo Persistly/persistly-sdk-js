@@ -66,18 +66,11 @@ export interface RuntimeGameConfig {
 export interface CreateAccountInput {
   playerRef?: string;
   externalAccountRef?: ExternalAccountRef;
-  /** @internal */
-  externalProfileRef?: ExternalAccountRef;
   accountData?: JsonObject;
   slot?: {
     slotId: string;
     slotInfo?: JsonObject;
     data: JsonObject;
-  };
-  /** @internal */
-  character?: {
-    metadata: JsonObject;
-    state: JsonObject;
   };
 }
 
@@ -102,16 +95,6 @@ export interface AccountSlot {
   data: JsonObject;
   version: number;
   updatedAt: string;
-  /** @internal compatibility projection for older facade internals. */
-  saveId: string;
-  /** @internal compatibility projection for older facade internals. */
-  metadata: JsonObject;
-  /** @internal compatibility projection for older facade internals. */
-  state: JsonObject;
-  /** @internal compatibility projection for older facade internals. */
-  createdAt: string;
-  /** @internal compatibility projection for older facade internals. */
-  playerRef: string | null;
 }
 
 export interface AccountEnvelope {
@@ -120,10 +103,6 @@ export interface AccountEnvelope {
   account: Account;
   slot?: AccountSlot;
   syncPolicy?: SyncPolicy;
-  /** @internal */
-  profile: Save;
-  /** @internal */
-  character?: Save | undefined;
 }
 
 export interface CreatedAccountEnvelope extends AccountEnvelope {
@@ -133,8 +112,6 @@ export interface CreatedAccountEnvelope extends AccountEnvelope {
 
 export interface AccountSlotEnvelope extends AccountEnvelope {
   slot: AccountSlot;
-  /** @internal */
-  character: Save;
 }
 
 export interface DeleteAccountResult {
@@ -152,8 +129,6 @@ export interface DeleteAccountSlotResult {
   alreadyDeleted: boolean;
   cleanupQueued: boolean;
   account?: Account;
-  /** @internal */
-  profile?: Save;
 }
 
 export interface AccountSessionInput {
@@ -162,29 +137,19 @@ export interface AccountSessionInput {
 }
 
 export interface AccountSlotInput extends AccountSessionInput {
-  slotId?: string;
-  /** @internal */
-  characterSaveId?: string;
+  slotId: string;
 }
 
 export interface CreateAccountSlotInput extends AccountSessionInput {
-  slotId?: string;
+  slotId: string;
   slotInfo?: JsonObject;
-  /** @internal */
-  metadata?: JsonObject;
-  data?: JsonObject;
-  /** @internal */
-  state?: JsonObject;
+  data: JsonObject;
 }
 
 export interface SyncAccountSlotInput extends AccountSlotInput {
   baseVersion?: number;
   slotInfo?: JsonObject;
-  /** @internal */
-  metadata?: JsonObject;
-  data?: JsonObject;
-  /** @internal */
-  state?: JsonObject;
+  data: JsonObject;
 }
 
 export interface SyncAccountDataInput extends AccountSessionInput {
@@ -314,7 +279,7 @@ export class PersistlyClient {
     }
 
     const response = await this.requestRaw(
-      `/api/v1/accounts/${encodeURIComponent(accountId)}/data/sync`,
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/data-sync`,
       {
         method: "POST",
         headers: accountSessionHeaders(payload.accountSessionToken),
@@ -378,20 +343,16 @@ export class PersistlyClient {
 
   async createAccountSlot(payload: CreateAccountSlotInput): Promise<AccountSlotEnvelope> {
     const accountId = assertAccountId(payload.accountId, "createAccountSlot");
-    const slotId = assertSlotId(payload.slotId ?? readSlotIdFromSlotInfo(payload.metadata ?? payload.slotInfo ?? {}), "createAccountSlot");
-    const data = payload.data ?? payload.state;
-    if (data === undefined) {
-      throw new PersistlyConfigurationError("createAccountSlot requires data.");
-    }
+    const slotId = assertSlotId(payload.slotId, "createAccountSlot");
     assertAccountSessionToken(payload.accountSessionToken, "createAccountSlot");
-    validatePayloadLimits({ metadata: payload.slotInfo ?? payload.metadata ?? {}, state: data });
+    validatePayloadLimits({ metadata: payload.slotInfo ?? {}, state: payload.data });
     const response = await this.requestJson(`/api/v1/accounts/${encodeURIComponent(accountId)}/slots`, {
       method: "POST",
       headers: accountSessionHeaders(payload.accountSessionToken),
       body: JSON.stringify({
         slotId,
-        slotInfo: payload.slotInfo ?? payload.metadata ?? {},
-        data,
+        slotInfo: payload.slotInfo ?? {},
+        data: payload.data,
       }),
     });
     return requireAccountSlotEnvelope(parseAccountEnvelope(response));
@@ -399,7 +360,7 @@ export class PersistlyClient {
 
   async loadAccountSlot(payload: AccountSlotInput): Promise<AccountSlot> {
     const accountId = assertAccountId(payload.accountId, "loadAccountSlot");
-    const slotId = assertSlotId(payload.slotId ?? payload.characterSaveId ?? "", "loadAccountSlot");
+    const slotId = assertSlotId(payload.slotId, "loadAccountSlot");
     assertAccountSessionToken(payload.accountSessionToken, "loadAccountSlot");
     const response = await this.requestJson(
       `/api/v1/accounts/${encodeURIComponent(accountId)}/slots/${encodeURIComponent(slotId)}`,
@@ -413,7 +374,7 @@ export class PersistlyClient {
 
   async deleteAccountSlot(payload: AccountSlotInput): Promise<DeleteAccountSlotResult> {
     const accountId = assertAccountId(payload.accountId, "deleteAccountSlot");
-    const slotId = assertSlotId(payload.slotId ?? payload.characterSaveId ?? "", "deleteAccountSlot");
+    const slotId = assertSlotId(payload.slotId, "deleteAccountSlot");
     assertAccountSessionToken(payload.accountSessionToken, "deleteAccountSlot");
     const response = await this.requestJson(
       `/api/v1/accounts/${encodeURIComponent(accountId)}/slots/${encodeURIComponent(slotId)}`,
@@ -427,13 +388,9 @@ export class PersistlyClient {
 
   async syncAccountSlot(payload: SyncAccountSlotInput): Promise<SyncSaveResult> {
     const accountId = assertAccountId(payload.accountId, "syncAccountSlot");
-    const slotId = assertSlotId(payload.slotId ?? payload.characterSaveId ?? "", "syncAccountSlot");
+    const slotId = assertSlotId(payload.slotId, "syncAccountSlot");
     assertAccountSessionToken(payload.accountSessionToken, "syncAccountSlot");
-    const data = payload.data ?? payload.state;
-    if (data === undefined) {
-      throw new PersistlyConfigurationError("syncAccountSlot requires data.");
-    }
-    validatePayloadLimits({ metadata: payload.slotInfo ?? payload.metadata ?? {}, state: data });
+    validatePayloadLimits({ metadata: payload.slotInfo ?? {}, state: payload.data });
     const cacheId = accountSlotCacheId(accountId, slotId);
     const cached = (await this.cache.get(cacheId)) ?? undefined;
     const baseVersion = payload.baseVersion ?? cached?.version;
@@ -451,8 +408,8 @@ export class PersistlyClient {
         headers: accountSessionHeaders(payload.accountSessionToken),
         body: JSON.stringify({
           baseVersion,
-          slotInfo: payload.slotInfo ?? payload.metadata,
-          data,
+          slotInfo: payload.slotInfo,
+          data: payload.data,
         }),
       },
     );
@@ -466,8 +423,8 @@ export class PersistlyClient {
           synthesizeSaveFromSync({
             saveId: cacheId,
             cached,
-            metadata: payload.slotInfo ?? payload.metadata,
-            state: data,
+            metadata: payload.slotInfo,
+            state: payload.data,
           }),
       );
       await this.cache.set(result.save);
@@ -485,7 +442,7 @@ export class PersistlyClient {
 
   async archiveAccountSlot(payload: AccountSlotInput): Promise<AccountEnvelope> {
     const accountId = assertAccountId(payload.accountId, "archiveAccountSlot");
-    const slotId = assertSlotId(payload.slotId ?? payload.characterSaveId ?? "", "archiveAccountSlot");
+    const slotId = assertSlotId(payload.slotId, "archiveAccountSlot");
     assertAccountSessionToken(payload.accountSessionToken, "archiveAccountSlot");
     const response = await this.requestJson(
       `/api/v1/accounts/${encodeURIComponent(accountId)}/slots/${encodeURIComponent(slotId)}/archive`,
@@ -771,16 +728,15 @@ function parseDeleteAccountSlotResult(value: unknown): DeleteAccountSlotResult {
   if (typeof record.cleanupQueued !== "boolean") {
     throw new PersistlyConfigurationError("Delete account slot response cleanupQueued must be a boolean.");
   }
-  return {
-    accountId: record.accountId,
-    slotId: record.slotId,
-    deletedAt: record.deletedAt,
-    alreadyDeleted: record.alreadyDeleted,
-    cleanupQueued: record.cleanupQueued,
-    ...(record.account === undefined ? {} : { account: parseAccount(record.account) }),
-    ...(record.account === undefined ? {} : { profile: accountToSave(parseAccount(record.account)) }),
-  };
-}
+    return {
+      accountId: record.accountId,
+      slotId: record.slotId,
+      deletedAt: record.deletedAt,
+      alreadyDeleted: record.alreadyDeleted,
+      cleanupQueued: record.cleanupQueued,
+      ...(record.account === undefined ? {} : { account: parseAccount(record.account) }),
+    };
+  }
 
 function parseAccountEnvelope(value: unknown): AccountEnvelope {
   const record = parseObject(value, "Account response");
@@ -804,8 +760,6 @@ function parseAccountEnvelope(value: unknown): AccountEnvelope {
     account,
     ...(slot === undefined ? {} : { slot }),
     ...(syncPolicy === undefined ? {} : { syncPolicy }),
-    profile: accountToSave(account),
-    ...(slot === undefined ? {} : { character: accountSlotToSave(accountId, slot) }),
   };
 }
 
@@ -832,7 +786,6 @@ function requireAccountSlotEnvelope(envelope: AccountEnvelope): AccountSlotEnvel
   return {
     ...envelope,
     slot: envelope.slot,
-    character: accountSlotToSave(envelope.accountId, envelope.slot),
   };
 }
 
@@ -905,12 +858,7 @@ function parseAccountSlot(value: unknown): AccountSlot {
     slotInfo: parseObject(record.slotInfo ?? {}, "Account slot slotInfo"),
     data: parseObject(record.data, "Account slot data"),
     version: record.version,
-    saveId: String(record.saveId ?? record.slotId),
-    metadata: parseObject(record.slotInfo ?? {}, "Account slot slotInfo"),
-    state: parseObject(record.data, "Account slot data"),
-    createdAt: nowForCompat(),
     updatedAt: record.updatedAt ?? nowForCompat(),
-    playerRef: null,
   };
 }
 
@@ -1090,12 +1038,6 @@ function accountToSave(account: Account): Save {
       schema: "persistly.account.v1",
       accountData: cloneJsonObject(account.accountData),
       slots: structuredClone(account.slots) as unknown as JsonObject[],
-      // Kept for older local facade internals while the public API is account-first.
-      characterSlots: structuredClone(account.slots.map((slot) => ({
-        slotKey: slot.slotId,
-        characterSaveId: accountSlotCacheId(account.accountId, slot.slotId),
-        metadata: cloneJsonObject(slot.slotInfo),
-      }))),
     },
     version: account.version ?? 1,
     createdAt: now,
@@ -1123,7 +1065,7 @@ function synthesizeAccountSaveFromSync(input: {
   accountDataPatch: JsonObject | undefined;
 }): Save {
   const cachedState = input.cached ? parseObject(input.cached.state, "Cached account state") : {};
-  const cachedAccountData = parseObject(cachedState.accountData ?? {}, "Cached profile accountData");
+  const cachedAccountData = parseObject(cachedState.accountData ?? {}, "Cached accountData");
   const accountData =
     input.accountData === undefined
       ? { ...cachedAccountData, ...cloneJsonObject(input.accountDataPatch ?? {}) }
@@ -1181,43 +1123,15 @@ function validateAccountCreatePayload(payload: CreateAccountInput): void {
     assertSlotId(payload.slot.slotId, "createAccount.slot");
     validatePayloadLimits({ metadata: payload.slot.slotInfo ?? {}, state: payload.slot.data });
   }
-  if (payload.character) {
-    validatePayloadLimits({ metadata: payload.character.metadata, state: payload.character.state });
-  }
 }
 
 function normalizeCreateAccountPayload(payload: CreateAccountInput): Record<string, unknown> {
-  const slot = payload.slot ?? (payload.character === undefined
-    ? undefined
-    : {
-        slotId: readSlotIdFromSlotInfo(payload.character.metadata),
-        slotInfo: stripPersistlySlotInfo(payload.character.metadata),
-        data: payload.character.state,
-      });
-
   return {
     ...(payload.playerRef === undefined ? {} : { playerRef: payload.playerRef }),
-    ...(payload.externalAccountRef === undefined && payload.externalProfileRef === undefined
-      ? {}
-      : { externalAccountRef: payload.externalAccountRef ?? payload.externalProfileRef }),
+    ...(payload.externalAccountRef === undefined ? {} : { externalAccountRef: payload.externalAccountRef }),
     ...(payload.accountData === undefined ? {} : { accountData: payload.accountData }),
-    ...(slot === undefined ? {} : { slot }),
+    ...(payload.slot === undefined ? {} : { slot: payload.slot }),
   };
-}
-
-function readSlotIdFromSlotInfo(slotInfo: JsonObject): string {
-  const persistly = parseObject(slotInfo._persistly, "slotInfo._persistly");
-  const slotId = persistly.slotKey ?? persistly.slotId;
-  if (typeof slotId !== "string") {
-    throw new PersistlyConfigurationError("slotInfo._persistly.slotId must be a string.");
-  }
-  return slotId;
-}
-
-function stripPersistlySlotInfo(slotInfo: JsonObject): JsonObject {
-  const clean = cloneJsonObject(slotInfo);
-  delete clean._persistly;
-  return clean;
 }
 
 function validateSyncAccountDataPayload(payload: SyncAccountDataInput): void {
@@ -1228,36 +1142,6 @@ function validateSyncAccountDataPayload(payload: SyncAccountDataInput): void {
     throw new PersistlyConfigurationError(
       "syncAccountData requires accountData or accountDataPatch.",
     );
-  }
-}
-
-function requireProfileCharacterSlotMetadata(metadata: JsonObject, label: string): void {
-  const record = parseObject(metadata, label);
-  const persistly = record._persistly;
-
-  if (persistly === undefined) {
-    throw new PersistlyConfigurationError(`${label}._persistly.slotKey is required.`);
-  }
-
-  validatePersistlySlotMetadata(persistly, label);
-}
-
-function validateReservedProfileCharacterMetadata(metadata: JsonObject, label: string): void {
-  const record = parseObject(metadata, label);
-  const persistly = record._persistly;
-  if (persistly !== undefined) {
-    validatePersistlySlotMetadata(persistly, label);
-  }
-}
-
-function validatePersistlySlotMetadata(persistly: unknown, label: string): void {
-  const persistlyRecord = parseObject(persistly, `${label}._persistly`);
-  const slotKey = persistlyRecord.slotKey;
-  if (typeof slotKey !== "string" || !/^[A-Za-z0-9_.-]{1,64}$/.test(slotKey)) {
-    throw new PersistlyConfigurationError(`${label}._persistly.slotKey must match ^[A-Za-z0-9_.-]{1,64}$.`);
-  }
-  if (Object.keys(persistlyRecord).length !== 1) {
-    throw new PersistlyConfigurationError(`${label}._persistly is reserved and may only contain slotKey.`);
   }
 }
 
