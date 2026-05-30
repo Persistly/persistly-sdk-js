@@ -921,8 +921,8 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
 
     try {
       const result = slot.version
-        ? await this.syncExistingCharacter(slot)
-        : await this.createAccountOrCharacterForSlot(slot);
+        ? await this.syncExistingSlot(slot)
+        : await this.createAccountOrSlot(slot);
       return this.emit(result);
     } catch (error) {
       return this.mapSyncError(error, PersistlyGameSaveTarget.Slot, canonicalSlotKey);
@@ -1125,7 +1125,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     return { status: PersistlyGameSaveStatus.LocalSaved, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey };
   }
 
-  private async createAccountOrCharacterForSlot(slot: SlotRecord): Promise<PersistlyGameSaveSyncResult> {
+  private async createAccountOrSlot(slot: SlotRecord): Promise<PersistlyGameSaveSyncResult> {
     let account = await this.getOrCreateLocalAccount();
     if (!account.accountId || !account.accountSessionToken) {
       const envelope = await this.client.createAccount({
@@ -1149,7 +1149,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     }
 
     if (!hasAccountSession(account)) {
-      throw new PersistlyConfigurationError("createAccountOrCharacterForSlot requires accountId and accountSessionToken.");
+      throw new PersistlyConfigurationError("createAccountOrSlot requires accountId and accountSessionToken.");
     }
     const accountId = account.accountId;
     const accountSessionToken = account.accountSessionToken;
@@ -1179,14 +1179,14 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
         throw error;
       }
       const reconciled = await this.reconcileExistingRemoteSlot(slot, accountId, accountSessionToken, account.syncPolicy);
-      return await this.syncExistingCharacter(reconciled);
+      return await this.syncExistingSlot(reconciled);
     }
   }
 
-  private async syncExistingCharacter(slot: SlotRecord): Promise<PersistlyGameSaveSyncResult> {
+  private async syncExistingSlot(slot: SlotRecord): Promise<PersistlyGameSaveSyncResult> {
     const account = await this.requireAccountSession("forceSync");
     if (!slot.version) {
-      throw new PersistlyConfigurationError("syncExistingCharacter requires a synced local slot.");
+      throw new PersistlyConfigurationError("syncExistingSlot requires a synced local slot.");
     }
 
     const baseVersion = slot.version ?? slot.cloudVersion;

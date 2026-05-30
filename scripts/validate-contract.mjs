@@ -5,9 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
-const preferredBundleRoot = path.join(repoRoot, "contracts", "persistly-contract-v0.4.0");
-const fallbackBundleRoot = path.join(repoRoot, "contracts", "persistly-contract-v0.3.0");
-const bundleRoot = await directoryExists(preferredBundleRoot) ? preferredBundleRoot : fallbackBundleRoot;
+const bundleRoot = path.join(repoRoot, "contracts", "persistly-contract-v0.4.0");
 const manifestPath = path.join(bundleRoot, "manifest.json");
 const expectedBundle = path.basename(bundleRoot);
 const expectedVersion = expectedBundle.replace("persistly-contract-", "");
@@ -22,6 +20,10 @@ const requiredPaths = new Set([
   "examples/conflict-response.json",
   "examples/error-response.json",
 ]);
+
+if (!(await directoryExists(bundleRoot))) {
+  throw new Error("Contract bundle persistly-contract-v0.4.0 is required.");
+}
 
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 
@@ -91,18 +93,14 @@ if (unexpectedFiles.length > 0) {
   throw new Error(`Contract bundle contains unexpected files: ${unexpectedFiles.join(", ")}`);
 }
 
-if (expectedBundle === "persistly-contract-v0.4.0") {
-  const openapi = await readFile(path.join(bundleRoot, "openapi", "persistly-api.yaml"), "utf8");
-  for (const accountPath of ["/api/v1/accounts", "/api/v1/accounts/{accountId}/slots/{slotId}/sync"]) {
-    if (!openapi.includes(accountPath)) {
-      throw new Error(`Contract OpenAPI is missing account path ${accountPath}.`);
-    }
+const openapi = await readFile(path.join(bundleRoot, "openapi", "persistly-api.yaml"), "utf8");
+for (const accountPath of ["/api/v1/accounts", "/api/v1/accounts/{accountId}/slots/{slotId}/sync"]) {
+  if (!openapi.includes(accountPath)) {
+    throw new Error(`Contract OpenAPI is missing account path ${accountPath}.`);
   }
-  if (openapi.includes("/api/v1/profiles") || openapi.includes("X-Persistly-Profile-Session")) {
-    throw new Error("Contract OpenAPI must not expose profile routes or profile session headers.");
-  }
-} else {
-  console.warn("Contract bundle persistly-contract-v0.4.0 is not present; validated existing v0.3.0 bundle integrity only.");
+}
+if (openapi.includes("/api/v1/profiles") || openapi.includes("X-Persistly-Profile-Session")) {
+  throw new Error("Contract OpenAPI must not expose profile routes or profile session headers.");
 }
 
 console.log(`Contract bundle ${expectedBundle} is present and matches manifest integrity metadata.`);
