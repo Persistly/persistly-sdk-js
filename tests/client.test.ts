@@ -122,6 +122,76 @@ test("syncAccountSlot uses account session header and synthesizes accepted slot 
   assert.equal(new Headers(requests[0]?.init?.headers).get("x-persistly-account-session"), "pst_session");
 });
 
+test("createTransferCode posts to the account transfer-code route with the account session header", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return createJsonResponse(201, {
+        transferCode: "P7K2D-M9Q4R",
+        expiresAt: "2026-06-01T12:10:00.000Z",
+        expiresInSeconds: 600,
+      });
+    },
+  });
+
+  const created = await client.createTransferCode({
+    accountId: "acc_test",
+    accountSessionToken: "pst_session",
+    deviceLabel: "Browser",
+    ttlSeconds: 600,
+  });
+
+  assert.deepEqual(created, {
+    transferCode: "P7K2D-M9Q4R",
+    expiresAt: "2026-06-01T12:10:00.000Z",
+    expiresInSeconds: 600,
+  });
+  assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/accounts/acc_test/transfer-codes`);
+  assert.equal(new Headers(requests[0]?.init?.headers).get("x-persistly-account-session"), "pst_session");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    deviceLabel: "Browser",
+    ttlSeconds: 600,
+  });
+});
+
+test("consumeTransferCode posts to the top-level consume route without an account session header", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return createJsonResponse(200, {
+        accountId: "acc_test",
+        accountSessionToken: "pst_new_session",
+        account: {
+          accountId: "acc_test",
+          accountData: { diamonds: 25 },
+          slots: [{ slotId: "autosave", slotInfo: { level: 12 }, version: 7 }],
+          version: 3,
+        },
+        syncPolicy,
+      });
+    },
+  });
+
+  const consumed = await client.consumeTransferCode({
+    transferCode: "P7K2D-M9Q4R",
+    deviceLabel: "Laptop",
+  });
+
+  assert.equal(consumed.accountId, "acc_test");
+  assert.equal(consumed.accountSessionToken, "pst_new_session");
+  assert.deepEqual(consumed.account.accountData, { diamonds: 25 });
+  assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/account-transfer-codes/consume`);
+  assert.equal(new Headers(requests[0]?.init?.headers).get("x-persistly-account-session"), null);
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    transferCode: "P7K2D-M9Q4R",
+    deviceLabel: "Laptop",
+  });
+});
+
 test("account and slot error codes map to account-first error classes", async () => {
   assert.ok(new PersistlyAccountDeletedError("deleted") instanceof Error);
   assert.ok(new PersistlySlotDeletedError("deleted") instanceof Error);

@@ -8,6 +8,11 @@ export type PersistlyErrorCode =
   | "slot_archived"
   | "account_deleted"
   | "slot_deleted"
+  | "transfer_code_invalid"
+  | "transfer_code_expired"
+  | "transfer_code_consumed"
+  | "transfer_code_rate_limited"
+  | "transfer_code_disabled"
   | "rate_limited"
   | "payload_too_large"
   | "server_error";
@@ -87,6 +92,41 @@ export class PersistlySlotDeletedError extends PersistlyApiError {
   }
 }
 
+export class PersistlyTransferCodeInvalidError extends PersistlyApiError {
+  constructor(message: string, details?: Record<string, unknown>, status = 400) {
+    super(status, "transfer_code_invalid", message, details);
+    this.name = "PersistlyTransferCodeInvalidError";
+  }
+}
+
+export class PersistlyTransferCodeExpiredError extends PersistlyApiError {
+  constructor(message: string, details?: Record<string, unknown>, status = 400) {
+    super(status, "transfer_code_expired", message, details);
+    this.name = "PersistlyTransferCodeExpiredError";
+  }
+}
+
+export class PersistlyTransferCodeConsumedError extends PersistlyApiError {
+  constructor(message: string, details?: Record<string, unknown>, status = 400) {
+    super(status, "transfer_code_consumed", message, details);
+    this.name = "PersistlyTransferCodeConsumedError";
+  }
+}
+
+export class PersistlyTransferCodeRateLimitedError extends PersistlyApiError {
+  constructor(message: string, details?: Record<string, unknown>, status = 429) {
+    super(status, "transfer_code_rate_limited", message, details);
+    this.name = "PersistlyTransferCodeRateLimitedError";
+  }
+}
+
+export class PersistlyTransferCodeDisabledError extends PersistlyApiError {
+  constructor(message: string, details?: Record<string, unknown>, status = 403) {
+    super(status, "transfer_code_disabled", message, details);
+    this.name = "PersistlyTransferCodeDisabledError";
+  }
+}
+
 export class PersistlyRateLimitedError extends PersistlyApiError {
   constructor(message: string, details?: Record<string, unknown>, status = 429) {
     super(status, "rate_limited", message, details);
@@ -162,6 +202,16 @@ export function createPersistlyApiError(
       return new PersistlyAccountDeletedError(message, details, status);
     case "slot_deleted":
       return new PersistlySlotDeletedError(message, details, status);
+    case "transfer_code_invalid":
+      return new PersistlyTransferCodeInvalidError(message, details, status);
+    case "transfer_code_expired":
+      return new PersistlyTransferCodeExpiredError(message, details, status);
+    case "transfer_code_consumed":
+      return new PersistlyTransferCodeConsumedError(message, details, status);
+    case "transfer_code_rate_limited":
+      return new PersistlyTransferCodeRateLimitedError(message, details, status);
+    case "transfer_code_disabled":
+      return new PersistlyTransferCodeDisabledError(message, details, status);
     case "rate_limited":
       return new PersistlyRateLimitedError(message, details, status);
     case "payload_too_large":

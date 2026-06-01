@@ -16,6 +16,19 @@ export async function attachPersistlyAccount(payload: AccountRestorePayload): Pr
   await PersistlyGameSaves.shared.attachAccount(payload);
 }
 
+export async function createPersistlyTransferCode(deviceLabel?: string) {
+  await PersistlyGameSaves.shared.ensureAccount();
+  return await PersistlyGameSaves.shared.createTransferCode({
+    ...(deviceLabel === undefined ? {} : { deviceLabel }),
+  });
+}
+
+export async function attachPersistlyAccountWithTransferCode(transferCode: string, deviceLabel?: string): Promise<void> {
+  await PersistlyGameSaves.shared.attachWithTransferCode(transferCode, {
+    ...(deviceLabel === undefined ? {} : { deviceLabel }),
+  });
+}
+
 export async function exportPersistlyAccountForBackend(): Promise<AccountRestorePayload> {
   await PersistlyGameSaves.shared.ensureAccount();
   const session = await PersistlyGameSaves.shared.getAccountSession({
@@ -45,4 +58,3 @@ export async function loadAccountSlot(slotId: string) {
 export async function syncAccountSlot(slotId: string) {
   return await PersistlyGameSaves.shared.forceSync(slotId);
 }
-

@@ -110,6 +110,22 @@ export interface CreatedAccountEnvelope extends AccountEnvelope {
   syncPolicy: SyncPolicy;
 }
 
+export interface CreateTransferCodeInput extends AccountSessionInput {
+  deviceLabel?: string;
+  ttlSeconds?: number;
+}
+
+export interface CreatedTransferCode {
+  transferCode: string;
+  expiresAt: string;
+  expiresInSeconds: number;
+}
+
+export interface ConsumeTransferCodeInput {
+  transferCode: string;
+  deviceLabel?: string;
+}
+
 export interface AccountSlotEnvelope extends AccountEnvelope {
   slot: AccountSlot;
 }
@@ -327,6 +343,32 @@ export class PersistlyClient {
       headers: accountSessionHeaders(payload.accountSessionToken),
     });
     return parseAccountEnvelope(response);
+  }
+
+  async createTransferCode(payload: CreateTransferCodeInput): Promise<CreatedTransferCode> {
+    const accountId = assertAccountId(payload.accountId, "createTransferCode");
+    assertAccountSessionToken(payload.accountSessionToken, "createTransferCode");
+    const response = await this.requestJson(
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/transfer-codes`,
+      {
+        method: "POST",
+        headers: accountSessionHeaders(payload.accountSessionToken),
+        body: JSON.stringify(transferCodeRequestBody(payload)),
+      },
+    );
+    return parseCreatedTransferCode(response);
+  }
+
+  async consumeTransferCode(payload: ConsumeTransferCodeInput): Promise<CreatedAccountEnvelope> {
+    const transferCode = assertTransferCode(payload.transferCode, "consumeTransferCode");
+    const response = await this.requestJson("/api/v1/account-transfer-codes/consume", {
+      method: "POST",
+      body: JSON.stringify(transferCodeRequestBody({
+        transferCode,
+        ...(payload.deviceLabel === undefined ? {} : { deviceLabel: payload.deviceLabel }),
+      })),
+    });
+    return requireCreatedAccountEnvelope(parseAccountEnvelope(response));
   }
 
   async deleteAccount(payload: AccountSessionInput): Promise<DeleteAccountResult> {
@@ -628,6 +670,13 @@ function assertAccountSessionToken(token: string, operation: string): string {
   return token;
 }
 
+function assertTransferCode(code: string, operation: string): string {
+  if (typeof code !== "string" || code.trim() === "") {
+    throw new PersistlyConfigurationError(`${operation} requires a non-empty transferCode.`);
+  }
+  return code.trim();
+}
+
 function accountSessionHeaders(token: string): HeadersInit {
   return {
     "x-persistly-account-session": token,
@@ -737,6 +786,27 @@ function parseDeleteAccountSlotResult(value: unknown): DeleteAccountSlotResult {
       ...(record.account === undefined ? {} : { account: parseAccount(record.account) }),
     };
   }
+
+function parseCreatedTransferCode(value: unknown): CreatedTransferCode {
+  const record = parseObject(value, "Create transfer code response");
+  const expiresInSeconds = record.expiresInSeconds;
+
+  if (typeof record.transferCode !== "string" || record.transferCode.trim() === "") {
+    throw new PersistlyConfigurationError("Create transfer code response transferCode must be a non-empty string.");
+  }
+  if (typeof record.expiresAt !== "string" || Number.isNaN(Date.parse(record.expiresAt))) {
+    throw new PersistlyConfigurationError("Create transfer code response expiresAt must be a valid date-time string.");
+  }
+  if (typeof expiresInSeconds !== "number" || !Number.isInteger(expiresInSeconds) || expiresInSeconds <= 0) {
+    throw new PersistlyConfigurationError("Create transfer code response expiresInSeconds must be a positive integer.");
+  }
+
+  return {
+    transferCode: record.transferCode,
+    expiresAt: record.expiresAt,
+    expiresInSeconds,
+  };
+}
 
 function parseAccountEnvelope(value: unknown): AccountEnvelope {
   const record = parseObject(value, "Account response");
@@ -1134,6 +1204,25 @@ function normalizeCreateAccountPayload(payload: CreateAccountInput): Record<stri
   };
 }
 
+function transferCodeRequestBody(payload: {
+  transferCode?: string;
+  deviceLabel?: string;
+  ttlSeconds?: number;
+}): Record<string, unknown> {
+  if (
+    payload.ttlSeconds !== undefined &&
+    (typeof payload.ttlSeconds !== "number" || !Number.isInteger(payload.ttlSeconds) || payload.ttlSeconds <= 0)
+  ) {
+    throw new PersistlyConfigurationError("transfer code ttlSeconds must be a positive integer when provided.");
+  }
+
+  return {
+    ...(payload.transferCode === undefined ? {} : { transferCode: payload.transferCode }),
+    ...(payload.deviceLabel === undefined ? {} : { deviceLabel: payload.deviceLabel }),
+    ...(payload.ttlSeconds === undefined ? {} : { ttlSeconds: payload.ttlSeconds }),
+  };
+}
+
 function validateSyncAccountDataPayload(payload: SyncAccountDataInput): void {
   if (payload.accountData !== undefined && payload.accountDataPatch !== undefined) {
     throw new PersistlyConfigurationError("syncAccountData accepts either accountData or accountDataPatch, not both.");
@@ -1190,6 +1279,11 @@ function isPersistlyErrorCode(value: unknown): value is PersistlyErrorCode {
     value === "slot_archived" ||
     value === "account_deleted" ||
     value === "slot_deleted" ||
+    value === "transfer_code_invalid" ||
+    value === "transfer_code_expired" ||
+    value === "transfer_code_consumed" ||
+    value === "transfer_code_rate_limited" ||
+    value === "transfer_code_disabled" ||
     value === "rate_limited" ||
     value === "payload_too_large" ||
     value === "server_error"

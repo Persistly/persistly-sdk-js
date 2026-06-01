@@ -4,7 +4,7 @@ JavaScript SDK for Persistly cloud saves in browser games, JavaScript game clien
 
 Most games should start with `PersistlyGameSaves`: configure once, save data locally, load locally, and sync to Persistly at safe moments. Simple games can use `saveData` and `loadData`. Games with manual saves or multiple slots can use `saveSlot` and `loadSlot`.
 
-This package is `0.11.0` and includes the account-first `persistly-contract-v0.4.0` bundle for release validation.
+This package is `0.11.1` and includes the account-first `persistly-contract-v0.4.0` bundle for release validation.
 
 ## Install
 
@@ -67,6 +67,18 @@ await PersistlyGameSaves.shared.attachAccount({
 });
 ```
 
+Anonymous transfer flow:
+
+```ts
+const transfer = await PersistlyGameSaves.shared.createTransferCode({
+  deviceLabel: "Browser",
+});
+
+// Show transfer.transferCode to the player. It expires soon.
+// On the new device, call this before local progress exists.
+await PersistlyGameSaves.shared.attachWithTransferCode(transfer.transferCode);
+```
+
 Use `clearLocalAccount()` for local sign-out only. Use `deleteAccount()` for permanent remote erasure. Use `archiveSlot(slotId)` to retire an active slot and `deleteSlot(slotId)` to permanently erase one slot.
 
 ## Account Data
@@ -116,6 +128,11 @@ await client.syncAccountSlot({
   slotId: "autosave",
   data: { level: 2, coins: 50 },
   slotInfo: { characterName: "Astra", level: 2 },
+});
+
+const transfer = await client.createTransferCode({
+  accountId: created.accountId,
+  accountSessionToken: created.accountSessionToken,
 });
 ```
 

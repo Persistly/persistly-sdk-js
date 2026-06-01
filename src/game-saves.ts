@@ -3,6 +3,7 @@ import {
   PersistlySyncStatus,
   type Account,
   type AccountSlot,
+  type CreatedTransferCode,
   type ExternalAccountRef,
   type Save,
   type SyncPolicy,
@@ -80,6 +81,15 @@ export interface PersistlyAccountSession {
 export interface PersistlyAttachAccountOptions {
   accountId: string;
   accountSessionToken: string;
+}
+
+export interface PersistlyCreateTransferCodeOptions {
+  deviceLabel?: string;
+  ttlSeconds?: number;
+}
+
+export interface PersistlyAttachWithTransferCodeOptions {
+  deviceLabel?: string;
 }
 
 export interface PersistlyEnsureAccountResult {
@@ -239,6 +249,11 @@ interface GameSavesStore {
 interface PersistlyGameSavesFacade {
   createAccount(): Promise<PersistlyEnsureAccountResult>;
   attachAccount(options: PersistlyAttachAccountOptions): Promise<PersistlyEnsureAccountResult>;
+  createTransferCode(options?: PersistlyCreateTransferCodeOptions): Promise<CreatedTransferCode>;
+  attachWithTransferCode(
+    transferCode: string,
+    options?: PersistlyAttachWithTransferCodeOptions,
+  ): Promise<PersistlyEnsureAccountResult>;
   ensureAccount(): Promise<PersistlyEnsureAccountResult>;
   getAccountSession(options?: { includeToken?: boolean }): Promise<PersistlyAccountSession>;
   getAccountInfo(): Promise<PersistlyAccountInspection>;
@@ -385,6 +400,14 @@ class UnconfiguredPersistlyGameSaves implements PersistlyGameSavesFacade {
   }
 
   async attachAccount(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async createTransferCode(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async attachWithTransferCode(): Promise<never> {
     throwNotConfigured();
   }
 
@@ -573,6 +596,39 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       target: PersistlyGameSaveTarget.Account,
       accountId: attached.accountId ?? options.accountId,
       account: accountRecordToSave(attached),
+    };
+  }
+
+  async createTransferCode(options: PersistlyCreateTransferCodeOptions = {}): Promise<CreatedTransferCode> {
+    const account = await this.requireAccountSession("createTransferCode");
+    return await this.client.createTransferCode({
+      accountId: account.accountId,
+      accountSessionToken: account.accountSessionToken,
+      ...(options.deviceLabel === undefined ? {} : { deviceLabel: options.deviceLabel }),
+      ...(options.ttlSeconds === undefined ? {} : { ttlSeconds: options.ttlSeconds }),
+    });
+  }
+
+  async attachWithTransferCode(
+    transferCode: string,
+    options: PersistlyAttachWithTransferCodeOptions = {},
+  ): Promise<PersistlyEnsureAccountResult> {
+    await this.assertNoExistingLocalAccountState(
+      "attachWithTransferCode requires empty local account state. Call clearLocalAccount() before attaching a transferred account.",
+    );
+    this.ignoreConfiguredAccountSessionSeed = true;
+    const envelope = await this.client.consumeTransferCode({
+      transferCode,
+      ...(options.deviceLabel === undefined ? {} : { deviceLabel: options.deviceLabel }),
+    });
+    const account = accountRecordFromAccount(envelope.account, envelope.accountSessionToken, envelope.syncPolicy);
+    await this.store.setAccount({ ...account, dirty: false, lastRemoteSyncedAt: this.now() });
+    await this.materializeAccountSlotRefs(account);
+    return {
+      status: PersistlyGameSaveStatus.Synced,
+      target: PersistlyGameSaveTarget.Account,
+      accountId: account.accountId ?? envelope.accountId,
+      account: accountRecordToSave(account),
     };
   }
 
