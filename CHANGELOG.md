@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0
+
+- Publishes the account-first JavaScript SDK surface under `@persistlyapp/sdk`.
+- Removes public profile compatibility exports and uses account, account session, slot, `slotInfo`, and data terminology throughout the package.
+- Keeps the facade-first path for games with `saveData`, `loadData`, `forceSyncData`, named slot helpers, account-data helpers, explicit account session export, and account-first conflict helpers.
+- Includes JavaScript templates for one-save, multi-slot, and account + slots game shapes.
+
 ## 0.10.2
 
 - Recovers automatically when a remote slot already exists but local SDK state has lost its slot binding.
