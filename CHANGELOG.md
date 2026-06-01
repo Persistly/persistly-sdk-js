@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.2
+
+- Adds short-lived account transfer-code helpers for moving anonymous saves between browsers/devices without public account lookup.
+- Adds typed transfer-code runtime errors for invalid, expired, consumed, rate-limited, and disabled transfer-code flows.
+- Documents browser-to-browser and cross-SDK transfer patterns through the public docs and resource center.
+
 ## 0.11.1
 
 - Fixes the `PersistlyGameSaves` facade runtime result shape so `loadData()`, `loadSlot()`, and `inspectSlot()` return the public `data`, `slotInfo`, `slotId`, `lastCloudData`, and `lastCloudSlotInfo` fields promised by the TypeScript declarations and docs.
