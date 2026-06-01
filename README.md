@@ -1,5 +1,11 @@
 # Persistly JavaScript SDK
 
+[![CI](https://github.com/Persistly/persistly-sdk-js/actions/workflows/ci.yml/badge.svg)](https://github.com/Persistly/persistly-sdk-js/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@persistlyapp/sdk.svg)](https://www.npmjs.com/package/@persistlyapp/sdk)
+[![npm provenance](https://img.shields.io/badge/npm%20provenance-ready-2ea44f)](https://docs.npmjs.com/trusted-publishers)
+[![license](https://img.shields.io/github/license/Persistly/persistly-sdk-js.svg)](LICENSE)
+[![docs](https://img.shields.io/badge/docs-persistly.app-6467f2)](https://docs.persistly.app/sdk/javascript)
+
 JavaScript SDK for Persistly cloud saves in browser games, JavaScript game clients, and JS-based engine wrappers.
 
 Most games should start with `PersistlyGameSaves`: configure once, save data locally, load locally, and sync to Persistly at safe moments. Simple games can use `saveData` and `loadData`. Games with manual saves or multiple slots can use `saveSlot` and `loadSlot`.
