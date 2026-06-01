@@ -805,7 +805,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     };
 
     await this.store.setSlot(record);
-    return { status: PersistlyGameSaveStatus.LocalSaved, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey };
+    return { status: PersistlyGameSaveStatus.LocalSaved, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(canonicalSlotKey) };
   }
 
   async listSlots(options: { includeArchived?: boolean } = {}): Promise<PersistlySlotInspection[]> {
@@ -820,7 +820,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       return {
         status: PersistlyGameSaveStatus.NotFound,
         target: PersistlyGameSaveTarget.Slot,
-        slotKey: canonicalSlotKey,
+        ...slotIdentity(canonicalSlotKey),
         dirty: false,
         archived: false,
       };
@@ -829,13 +829,17 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     return {
       status: PersistlyGameSaveStatus.LocalFound,
       target: PersistlyGameSaveTarget.Slot,
-      slotKey: canonicalSlotKey,
+      ...slotIdentity(canonicalSlotKey),
+      data: clone(slot.state),
       state: clone(slot.state),
+      slotInfo: clone(slot.metadata),
       metadata: clone(slot.metadata),
       ...(slot.version === undefined ? {} : { version: slot.version }),
       dirty: slot.dirty,
       archived: slot.archived,
+      ...(slot.cloudState === undefined ? {} : { lastCloudData: clone(slot.cloudState) }),
       ...(slot.cloudState === undefined ? {} : { lastCloudState: clone(slot.cloudState) }),
+      ...(slot.cloudMetadata === undefined ? {} : { lastCloudSlotInfo: clone(slot.cloudMetadata) }),
       ...(slot.cloudMetadata === undefined ? {} : { lastCloudMetadata: clone(slot.cloudMetadata) }),
       ...(slot.lastLocalSavedAt === undefined ? {} : { lastLocalSavedAt: slot.lastLocalSavedAt }),
       ...(slot.lastRemoteSyncedAt === undefined ? {} : { lastRemoteSyncedAt: slot.lastRemoteSyncedAt }),
@@ -856,7 +860,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       return this.emit({
         status: PersistlyGameSaveStatus.NoChanges,
         target: PersistlyGameSaveTarget.Slot,
-        slotKey: canonicalSlotKey,
+        ...slotIdentity(canonicalSlotKey),
       });
     }
 
@@ -878,7 +882,9 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
         return this.emit({
           status: PersistlyGameSaveStatus.Conflict,
           target: PersistlyGameSaveTarget.Slot,
-          slotKey: canonicalSlotKey,
+          ...slotIdentity(canonicalSlotKey),
+          localData: clone(slot.state),
+          cloudData: clone(remote.data),
           localState: clone(slot.state),
           cloudState: clone(remote.data),
           ...(slot.version === undefined ? {} : { localVersion: slot.version }),
@@ -897,7 +903,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       return this.emit({
         status: PersistlyGameSaveStatus.Synced,
         target: PersistlyGameSaveTarget.Slot,
-        slotKey: canonicalSlotKey,
+        ...slotIdentity(canonicalSlotKey),
         save: remoteSave,
       });
     } catch (error) {
@@ -913,10 +919,10 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     const canonicalSlotKey = assertSlotKey(slotId);
     const slot = await this.store.getSlot(canonicalSlotKey);
     if (!slot?.dirty) {
-      return this.emit({ status: PersistlyGameSaveStatus.NoChanges, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey });
+      return this.emit({ status: PersistlyGameSaveStatus.NoChanges, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(canonicalSlotKey) });
     }
     if (!options.bypassCooldown && !isForceSyncAllowed(slot.lastRemoteSyncedAt, (await this.store.getAccount())?.syncPolicy)) {
-      return this.emit({ status: PersistlyGameSaveStatus.Cooldown, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey });
+      return this.emit({ status: PersistlyGameSaveStatus.Cooldown, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(canonicalSlotKey) });
     }
 
     try {
@@ -935,13 +941,13 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       const slot = await this.store.getSlot(slotKey);
       if (!slot?.dirty) {
         if (options.includeSkipped) {
-          results.push({ status: PersistlyGameSaveStatus.NoChanges, target: PersistlyGameSaveTarget.Slot, slotKey });
+          results.push({ status: PersistlyGameSaveStatus.NoChanges, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(slotKey) });
         }
         continue;
       }
       if (!options.bypassCooldown && !isDue(slot.lastRemoteSyncedAt, (await this.store.getAccount())?.syncPolicy)) {
         if (options.includeSkipped) {
-          results.push({ status: PersistlyGameSaveStatus.Cooldown, target: PersistlyGameSaveTarget.Slot, slotKey });
+          results.push({ status: PersistlyGameSaveStatus.Cooldown, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(slotKey) });
         }
         continue;
       }
@@ -985,7 +991,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
         archived: true,
         lastRemoteSyncedAt: this.now(),
       });
-      return this.emit({ status: PersistlyGameSaveStatus.Synced, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey });
+      return this.emit({ status: PersistlyGameSaveStatus.Synced, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(canonicalSlotKey) });
     } catch (error) {
       return this.mapSyncError(error, PersistlyGameSaveTarget.Slot, canonicalSlotKey);
     }
@@ -1024,7 +1030,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     const canonicalSlotKey = assertSlotKey(slotId);
     const slot = await this.store.getSlot(canonicalSlotKey);
     if (!slot) {
-      return this.emit({ status: PersistlyGameSaveStatus.NoChanges, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey });
+      return this.emit({ status: PersistlyGameSaveStatus.NoChanges, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(canonicalSlotKey) });
     }
     if (!slot.version) {
       await this.store.deleteSlot(canonicalSlotKey);
@@ -1032,7 +1038,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       if (account) {
         await this.store.setAccount(removeSlotRefFromAccount(account, canonicalSlotKey));
       }
-      return this.emit({ status: PersistlyGameSaveStatus.LocalSaved, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey });
+      return this.emit({ status: PersistlyGameSaveStatus.LocalSaved, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(canonicalSlotKey) });
     }
 
     const account = await this.requireAccountSession("deleteSlot");
@@ -1054,7 +1060,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     return this.emit({
       status: PersistlyGameSaveStatus.Synced,
       target: PersistlyGameSaveTarget.Slot,
-      slotKey: canonicalSlotKey,
+      ...slotIdentity(canonicalSlotKey),
       ...(result.cleanupQueued ? { warnings: ["delete_cleanup_queued"] } : {}),
     });
   }
@@ -1071,7 +1077,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
   async clearLocalSlot(slotId: string): Promise<PersistlyGameSaveSyncResult> {
     const canonicalSlotKey = assertSlotKey(slotId);
     await this.store.deleteSlot(canonicalSlotKey);
-    return { status: PersistlyGameSaveStatus.LocalSaved, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey };
+    return { status: PersistlyGameSaveStatus.LocalSaved, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(canonicalSlotKey) };
   }
 
   async acceptCloudData(): Promise<PersistlyGameSaveSyncResult> {
@@ -1090,7 +1096,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     const canonicalSlotKey = assertSlotKey(slotId);
     const slot = await this.store.getSlot(canonicalSlotKey);
     if (!slot?.cloudState || slot.cloudVersion === undefined) {
-      return { status: PersistlyGameSaveStatus.NoChanges, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey };
+      return { status: PersistlyGameSaveStatus.NoChanges, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(canonicalSlotKey) };
     }
 
     await this.store.setSlot({
@@ -1101,14 +1107,14 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       dirty: false,
       lastRemoteSyncedAt: this.now(),
     });
-    return { status: PersistlyGameSaveStatus.Synced, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey };
+    return { status: PersistlyGameSaveStatus.Synced, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(canonicalSlotKey) };
   }
 
   async overwriteCloudVersion(slotId: string, options: PersistlyGameSavesSyncOptions = {}): Promise<PersistlyGameSaveSyncResult> {
     const canonicalSlotKey = assertSlotKey(slotId);
     const slot = await this.store.getSlot(canonicalSlotKey);
     if (!slot?.dirty) {
-      return { status: PersistlyGameSaveStatus.NoChanges, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey };
+      return { status: PersistlyGameSaveStatus.NoChanges, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(canonicalSlotKey) };
     }
     if (slot.cloudVersion !== undefined) {
       await this.store.setSlot({ ...slot, version: slot.cloudVersion });
@@ -1122,7 +1128,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     if (slot) {
       await this.store.setSlot({ ...slot, dirty: true });
     }
-    return { status: PersistlyGameSaveStatus.LocalSaved, target: PersistlyGameSaveTarget.Slot, slotKey: canonicalSlotKey };
+    return { status: PersistlyGameSaveStatus.LocalSaved, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(canonicalSlotKey) };
   }
 
   private async createAccountOrSlot(slot: SlotRecord): Promise<PersistlyGameSaveSyncResult> {
@@ -1145,7 +1151,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       }
       const save = accountSlotToLocalSave(envelope.accountId, envelope.slot);
       await this.store.setSlot(slotFromSave(slot.slotKey, save, slot.state, slot.metadata, this.now()));
-      return { status: PersistlyGameSaveStatus.Synced, target: PersistlyGameSaveTarget.Slot, slotKey: slot.slotKey, save };
+      return { status: PersistlyGameSaveStatus.Synced, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(slot.slotKey), save };
     }
 
     if (!hasAccountSession(account)) {
@@ -1173,7 +1179,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       });
       const save = accountSlotToLocalSave(accountId, envelope.slot);
       await this.store.setSlot(slotFromSave(slot.slotKey, save, slot.state, slot.metadata, this.now()));
-      return { status: PersistlyGameSaveStatus.Synced, target: PersistlyGameSaveTarget.Slot, slotKey: slot.slotKey, save };
+      return { status: PersistlyGameSaveStatus.Synced, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(slot.slotKey), save };
     } catch (error) {
       if (!(error instanceof PersistlySlotAlreadyExistsError)) {
         throw error;
@@ -1210,7 +1216,9 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       return {
         status: PersistlyGameSaveStatus.Conflict,
         target: PersistlyGameSaveTarget.Slot,
-        slotKey: slot.slotKey,
+        ...slotIdentity(slot.slotKey),
+        localData: clone(slot.state),
+        cloudData: clone(result.save.state),
         localState: clone(slot.state),
         cloudState: clone(result.save.state),
         ...(slot.version === undefined ? {} : { localVersion: slot.version }),
@@ -1223,7 +1231,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     return {
       status: PersistlyGameSaveStatus.Synced,
       target: PersistlyGameSaveTarget.Slot,
-      slotKey: slot.slotKey,
+      ...slotIdentity(slot.slotKey),
       save: result.save,
       historyRetained: result.historyRetained,
       ...(result.warnings === undefined ? {} : { warnings: result.warnings }),
@@ -1312,15 +1320,15 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       return this.emit({
         status: PersistlyGameSaveStatus.RateLimited,
         target,
-        ...(slotKey === undefined ? {} : { slotKey }),
+        ...(slotKey === undefined ? {} : slotIdentity(slotKey)),
         ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
       });
     }
     if (error instanceof PersistlyTransportError || (error instanceof Error && /fetch|network|offline/i.test(error.message))) {
-      return this.emit({ status: PersistlyGameSaveStatus.Offline, target, ...(slotKey === undefined ? {} : { slotKey }) });
+      return this.emit({ status: PersistlyGameSaveStatus.Offline, target, ...(slotKey === undefined ? {} : slotIdentity(slotKey)) });
     }
     if (error instanceof PersistlyApiError && error.code === "rate_limited") {
-      return this.emit({ status: PersistlyGameSaveStatus.RateLimited, target, ...(slotKey === undefined ? {} : { slotKey }) });
+      return this.emit({ status: PersistlyGameSaveStatus.RateLimited, target, ...(slotKey === undefined ? {} : slotIdentity(slotKey)) });
     }
     throw error;
   }
@@ -1765,4 +1773,12 @@ function randomId(): string {
 
 function throwNotConfigured(): never {
   throw new PersistlyConfigurationError("not_configured: call PersistlyGameSaves.configure() first");
+}
+
+function slotIdentity(slotId: string) {
+  return {
+    slotId,
+    /** @internal */
+    slotKey: slotId,
+  };
 }

@@ -31,9 +31,13 @@ test("saveData and loadData keep default autosave slot behavior with slotInfo", 
   const loaded = await persistly.loadData();
 
   assert.equal(saved.status, PersistlyGameSaveStatus.LocalSaved);
+  assert.equal(saved.slotId, "autosave");
   assert.equal(loaded.status, PersistlyGameSaveStatus.LocalFound);
+  assert.equal(loaded.slotId, "autosave");
   assert.equal(loaded.slotKey, "autosave");
+  assert.deepEqual(loaded.data, { level: 2 });
   assert.deepEqual(loaded.state, { level: 2 });
+  assert.deepEqual(loaded.slotInfo, { characterName: "Ayla" });
   assert.deepEqual(loaded.metadata, { characterName: "Ayla" });
 });
 

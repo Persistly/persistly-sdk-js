@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.1
+
+- Fixes the `PersistlyGameSaves` facade runtime result shape so `loadData()`, `loadSlot()`, and `inspectSlot()` return the public `data`, `slotInfo`, `slotId`, `lastCloudData`, and `lastCloudSlotInfo` fields promised by the TypeScript declarations and docs.
+- Keeps `state`, `metadata`, `slotKey`, `lastCloudState`, and `lastCloudMetadata` as runtime compatibility aliases for callers that adopted the first `0.11.0` package before this patch.
+
 ## 0.11.0
 
 - Publishes the account-first JavaScript SDK surface under `@persistlyapp/sdk`.

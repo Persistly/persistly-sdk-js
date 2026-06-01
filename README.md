@@ -33,7 +33,7 @@ await PersistlyGameSaves.shared.saveData({
 });
 
 const loaded = await PersistlyGameSaves.shared.loadData();
-console.log("Loaded local data:", loaded.state);
+console.log("Loaded local data:", loaded.data);
 
 const sync = await PersistlyGameSaves.shared.forceSyncData();
 
