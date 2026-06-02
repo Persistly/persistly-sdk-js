@@ -3,9 +3,9 @@
   "slot": {
     "slotId": "autosave",
     "slotInfo": {
-      "characterName": "Ayla",
-      "className": "Mage",
-      "level": 7
+      "label": "Autosave",
+      "level": 8,
+      "location": "Sky Bridge"
     },
     "data": {
       "checkpoint": "sky-bridge",
@@ -15,7 +15,31 @@
     "status": "active",
     "updatedAt": "2026-05-29T12:05:00Z"
   },
+  "version": 3,
+  "updatedAt": "2026-05-29T12:05:00Z",
   "details": {
-    "reason": "base_version_mismatch"
+    "reason": "base_version_mismatch",
+    "serverSlot": {
+      "slotInfo": {
+        "label": "Autosave",
+        "level": 8,
+        "location": "Sky Bridge"
+      },
+      "data": {
+        "checkpoint": "sky-bridge",
+        "coins": 900
+      }
+    },
+    "clientSlot": {
+      "slotInfo": {
+        "label": "Autosave",
+        "level": 7,
+        "location": "Reactor"
+      },
+      "data": {
+        "checkpoint": "reactor",
+        "coins": 760
+      }
+    }
   }
 }

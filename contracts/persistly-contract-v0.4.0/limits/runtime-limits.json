@@ -1,6 +1,6 @@
 {
-  "metadataMaxBytes": 16384,
-  "stateMaxBytes": 262144,
+  "slotInfoMaxBytes": 16384,
+  "slotDataMaxBytes": 262144,
   "planLimits": {
     "free": {
       "monthlyRuntimeRequests": 100000,
@@ -10,10 +10,10 @@
       "storageQuotaBytes": 1073741824,
       "restoreHistoryDays": 1,
       "normalSnapshotIntervalSeconds": 1800,
-      "maxNormalSnapshotsPerCharacter": 24,
+      "maxNormalSnapshotsPerSlot": 24,
       "accountDataMaxBytes": 262144,
-      "characterStateMaxBytes": 262144,
-      "metadataMaxBytes": 16384,
+      "slotDataMaxBytes": 262144,
+      "slotInfoMaxBytes": 16384,
       "gameConfigMaxBytes": 16384
     },
     "starter": {
@@ -24,10 +24,10 @@
       "storageQuotaBytes": 26843545600,
       "restoreHistoryDays": 7,
       "normalSnapshotIntervalSeconds": 600,
-      "maxNormalSnapshotsPerCharacter": 100,
+      "maxNormalSnapshotsPerSlot": 100,
       "accountDataMaxBytes": 524288,
-      "characterStateMaxBytes": 524288,
-      "metadataMaxBytes": 32768,
+      "slotDataMaxBytes": 524288,
+      "slotInfoMaxBytes": 32768,
       "gameConfigMaxBytes": 32768
     },
     "growth": {
@@ -38,10 +38,10 @@
       "storageQuotaBytes": 107374182400,
       "restoreHistoryDays": 30,
       "normalSnapshotIntervalSeconds": 300,
-      "maxNormalSnapshotsPerCharacter": 300,
+      "maxNormalSnapshotsPerSlot": 300,
       "accountDataMaxBytes": 1048576,
-      "characterStateMaxBytes": 1048576,
-      "metadataMaxBytes": 65536,
+      "slotDataMaxBytes": 1048576,
+      "slotInfoMaxBytes": 65536,
       "gameConfigMaxBytes": 65536
     },
     "pro": {
@@ -52,10 +52,10 @@
       "storageQuotaBytes": 536870912000,
       "restoreHistoryDays": 90,
       "normalSnapshotIntervalSeconds": 60,
-      "maxNormalSnapshotsPerCharacter": 1000,
+      "maxNormalSnapshotsPerSlot": 1000,
       "accountDataMaxBytes": 2097152,
-      "characterStateMaxBytes": 2097152,
-      "metadataMaxBytes": 131072,
+      "slotDataMaxBytes": 2097152,
+      "slotInfoMaxBytes": 131072,
       "gameConfigMaxBytes": 131072
     },
     "creator_demo": {
@@ -66,10 +66,10 @@
       "storageQuotaBytes": 1073741824,
       "restoreHistoryDays": 1,
       "normalSnapshotIntervalSeconds": 1800,
-      "maxNormalSnapshotsPerCharacter": 24,
+      "maxNormalSnapshotsPerSlot": 24,
       "accountDataMaxBytes": 262144,
-      "characterStateMaxBytes": 262144,
-      "metadataMaxBytes": 16384,
+      "slotDataMaxBytes": 262144,
+      "slotInfoMaxBytes": 16384,
       "gameConfigMaxBytes": 16384
     }
   },

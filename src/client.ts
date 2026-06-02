@@ -14,22 +14,6 @@ import { parseObject as parseSchemaObject, parseSaveSnapshot, type JsonObject, t
 
 export type Save = SaveSnapshot;
 
-export interface SaveEnvelope {
-  save: Save;
-}
-
-export interface CreateSaveInput {
-  playerRef?: string;
-  metadata?: JsonObject;
-  state: JsonObject;
-}
-
-export interface SyncSaveInput {
-  baseVersion?: number;
-  metadata?: JsonObject;
-  state: JsonObject;
-}
-
 export interface ExternalAccountRef {
   provider: string;
   subject: string;
@@ -250,18 +234,6 @@ export class PersistlyClient {
     return await this.cache.get(saveId);
   }
 
-  async createSave(payload: CreateSaveInput): Promise<Save> {
-    validatePayloadLimits(payload);
-    const response = await this.requestJson("/api/v1/saves", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    const save = parseSaveEnvelope(response).save;
-
-    await this.cache.set(save);
-    return save;
-  }
-
   async createAccount(payload: CreateAccountInput): Promise<CreatedAccountEnvelope> {
     validateAccountCreatePayload(payload);
     const requestPayload = normalizeCreateAccountPayload(payload);
@@ -281,7 +253,7 @@ export class PersistlyClient {
     validatePayloadLimits({
       ...(payload.accountData === undefined && payload.accountDataPatch === undefined
         ? {}
-        : { state: payload.accountData ?? payload.accountDataPatch }),
+        : { accountData: payload.accountData ?? payload.accountDataPatch }),
     });
 
     const body: Record<string, unknown> = {
@@ -387,7 +359,7 @@ export class PersistlyClient {
     const accountId = assertAccountId(payload.accountId, "createAccountSlot");
     const slotId = assertSlotId(payload.slotId, "createAccountSlot");
     assertAccountSessionToken(payload.accountSessionToken, "createAccountSlot");
-    validatePayloadLimits({ metadata: payload.slotInfo ?? {}, state: payload.data });
+    validatePayloadLimits({ slotInfo: payload.slotInfo ?? {}, data: payload.data });
     const response = await this.requestJson(`/api/v1/accounts/${encodeURIComponent(accountId)}/slots`, {
       method: "POST",
       headers: accountSessionHeaders(payload.accountSessionToken),
@@ -432,7 +404,7 @@ export class PersistlyClient {
     const accountId = assertAccountId(payload.accountId, "syncAccountSlot");
     const slotId = assertSlotId(payload.slotId, "syncAccountSlot");
     assertAccountSessionToken(payload.accountSessionToken, "syncAccountSlot");
-    validatePayloadLimits({ metadata: payload.slotInfo ?? {}, state: payload.data });
+    validatePayloadLimits({ slotInfo: payload.slotInfo ?? {}, data: payload.data });
     const cacheId = accountSlotCacheId(accountId, slotId);
     const cached = (await this.cache.get(cacheId)) ?? undefined;
     const baseVersion = payload.baseVersion ?? cached?.version;
@@ -502,64 +474,6 @@ export class PersistlyClient {
       method: "GET",
     });
     return parseRuntimeConfig(response);
-  }
-
-  async loadSave(saveId: string): Promise<Save> {
-    const canonicalSaveId = assertSaveId(saveId, "loadSave");
-    const response = await this.requestJson(`/api/v1/saves/${encodeURIComponent(canonicalSaveId)}`, {
-      method: "GET",
-    });
-    const save = parseSaveEnvelope(response).save;
-
-    await this.cache.set(save);
-    return save;
-  }
-
-  async syncSave(saveId: string, payload: SyncSaveInput): Promise<SyncSaveResult> {
-    const canonicalSaveId = assertSaveId(saveId, "syncSave");
-    validatePayloadLimits(payload);
-    const cached = (await this.cache.get(canonicalSaveId)) ?? undefined;
-    const baseVersion = payload.baseVersion ?? cached?.version;
-
-    if (!baseVersion) {
-      throw new PersistlyConfigurationError(
-        "syncSave requires baseVersion unless the cache already holds a canonical save for this saveId.",
-      );
-    }
-
-    const response = await this.requestRaw(`/api/v1/saves/${encodeURIComponent(canonicalSaveId)}/sync`, {
-      method: "POST",
-      body: JSON.stringify({
-        baseVersion,
-        metadata: payload.metadata,
-        state: payload.state,
-      }),
-    });
-    const json = await parseJsonResponse(response);
-
-    if (response.status === 200) {
-      const accepted = parseAcceptedSyncResult(json);
-      const result = syncAcceptedResultWithSave(
-        accepted,
-        accepted.save ??
-          synthesizeSaveFromSync({
-            saveId: canonicalSaveId,
-            cached,
-            metadata: payload.metadata,
-            state: payload.state,
-          }),
-      );
-      await this.cache.set(result.save);
-      return result;
-    }
-
-    if (response.status === 409) {
-      const result = parseConflictSyncResult(json);
-      await this.cache.set(result.save);
-      return result;
-    }
-
-    throw parseApiError(response.status, json);
   }
 
   private async requestJson(pathname: string, init: RequestInit): Promise<unknown> {
@@ -724,14 +638,6 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
 
     throw new PersistlyTransportError("Persistly response was not valid JSON.", error);
   }
-}
-
-function parseSaveEnvelope(value: unknown): SaveEnvelope {
-  const record = parseObject(value, "Save response");
-
-  return {
-    save: parseSave(record.save),
-  };
 }
 
 function parseDeleteAccountResult(value: unknown): DeleteAccountResult {
@@ -1187,11 +1093,11 @@ function isSyncConflictPayload(value: unknown): boolean {
 
 function validateAccountCreatePayload(payload: CreateAccountInput): void {
   validatePayloadLimits({
-    ...(payload.accountData === undefined ? {} : { state: payload.accountData }),
+    ...(payload.accountData === undefined ? {} : { accountData: payload.accountData }),
   });
   if (payload.slot) {
     assertSlotId(payload.slot.slotId, "createAccount.slot");
-    validatePayloadLimits({ metadata: payload.slot.slotInfo ?? {}, state: payload.slot.data });
+    validatePayloadLimits({ slotInfo: payload.slot.slotInfo ?? {}, data: payload.slot.data });
   }
 }
 

@@ -96,6 +96,7 @@ export interface PersistlyEnsureAccountResult {
   status: typeof PersistlyGameSaveStatus.Synced | typeof PersistlyGameSaveStatus.LocalFound;
   target: typeof PersistlyGameSaveTarget.Account;
   accountId: string;
+  /** @internal */
   account?: Save;
 }
 
@@ -158,7 +159,9 @@ export type PersistlyGameSaveSyncResult =
       slotId?: string;
       /** @internal */
       slotKey?: string;
+      /** @internal */
       save?: Save | undefined;
+      /** @internal */
       account?: Save | undefined;
       historyRetained?: boolean;
       warnings?: string[];
@@ -177,6 +180,7 @@ export type PersistlyGameSaveSyncResult =
       cloudState?: JsonObject;
       localVersion?: number;
       cloudVersion: number;
+      /** @internal */
       cloudSave: Save;
     }
   | {
@@ -263,10 +267,10 @@ interface PersistlyGameSavesFacade {
   forceSyncAccount(options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult>;
   syncDueAccount(options?: PersistlyGameSavesSyncOptions): Promise<PersistlyGameSaveSyncResult>;
   loadData(): Promise<PersistlySlotInspection>;
-  saveData(state: JsonObject, options?: PersistlyGameSavesSaveSlotOptions): Promise<PersistlyGameSaveSyncResult>;
+  saveData(data: JsonObject, options?: PersistlyGameSavesSaveSlotOptions): Promise<PersistlyGameSaveSyncResult>;
   inspectData(): Promise<PersistlySlotInspection>;
   loadSlot(slotId: string): Promise<PersistlySlotInspection>;
-  saveSlot(slotId: string, state: JsonObject, options?: PersistlyGameSavesSaveSlotOptions): Promise<PersistlyGameSaveSyncResult>;
+  saveSlot(slotId: string, data: JsonObject, options?: PersistlyGameSavesSaveSlotOptions): Promise<PersistlyGameSaveSyncResult>;
   listSlots(options?: { includeArchived?: boolean }): Promise<PersistlySlotInspection[]>;
   inspectSlot(slotId: string): Promise<PersistlySlotInspection>;
   refreshSlot(slotId: string): Promise<PersistlyGameSaveSyncResult>;
@@ -828,15 +832,15 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
   }
 
   async saveData(
-    state: JsonObject,
+    data: JsonObject,
     options: PersistlyGameSavesSaveSlotOptions = {},
   ): Promise<PersistlyGameSaveSyncResult> {
-    return await this.saveSlot(PersistlyDefaultSlotKey, state, options);
+    return await this.saveSlot(PersistlyDefaultSlotKey, data, options);
   }
 
   async saveSlot(
     slotId: string,
-    state: JsonObject,
+    data: JsonObject,
     options: PersistlyGameSavesSaveSlotOptions = {},
   ): Promise<PersistlyGameSaveSyncResult> {
     await this.getOrCreateLocalAccount();
@@ -850,7 +854,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       ...(reusableExisting?.version === undefined ? {} : { version: reusableExisting.version }),
       metadata: developerSlotMetadata(options.slotInfo ?? options.metadata ?? existing?.metadata ?? {}),
       slotInfo: developerSlotMetadata(options.slotInfo ?? options.metadata ?? existing?.metadata ?? {}),
-      state: clone(parseObject(state, "slot.state")),
+      state: clone(parseObject(data, "slot.data")),
       ...(reusableExisting?.cloudState === undefined ? {} : { cloudState: reusableExisting.cloudState }),
       ...(reusableExisting?.cloudMetadata === undefined ? {} : { cloudMetadata: reusableExisting.cloudMetadata }),
       ...(reusableExisting?.cloudVersion === undefined ? {} : { cloudVersion: reusableExisting.cloudVersion }),

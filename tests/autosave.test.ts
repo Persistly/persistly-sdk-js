@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 
 import {
   MemoryAutosaveDraftStore,
-  MemorySaveCache,
   PersistlyAutosaveManager,
   PersistlyClient,
   PersistlySyncStatus,
 } from "../src/index.js";
+import { MemorySaveCache } from "../src/cache.js";
 
 const syncPolicy = {
   minRemoteSyncIntervalSeconds: 60,

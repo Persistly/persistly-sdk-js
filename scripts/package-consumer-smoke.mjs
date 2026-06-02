@@ -22,8 +22,7 @@ await writeFile(join(workspace, "package.json"), JSON.stringify({ type: "module"
 await execFileAsync("npm", ["install", join(workspace, tarball), "typescript@latest"], { cwd: workspace, env: npmEnv });
 await writeFile(
   join(workspace, "smoke.ts"),
-  `import {
-  LocalStorageSaveCache,
+`import {
   PersistlyClient,
   PersistlyGameSaveStatus,
   PersistlyGameSaves,
@@ -31,9 +30,7 @@ await writeFile(
 } from "@persistlyapp/sdk";
 import type { SyncPolicy } from "@persistlyapp/sdk/client";
 import type { PersistlyErrorPayload } from "@persistlyapp/sdk";
-import type { JsonObject, SaveSnapshot } from "@persistlyapp/sdk/cache";
 import type { RuntimeConfig } from "@persistlyapp/sdk/client";
-import type { LocalStorageLike } from "@persistlyapp/sdk/local-storage-cache";
 import type { PersistlyAccountState } from "@persistlyapp/sdk/account";
 
 const policy: SyncPolicy = {
@@ -45,31 +42,16 @@ const policy: SyncPolicy = {
   maxQueuedLocalSnapshots: 10,
 };
 
-const snapshot: SaveSnapshot = {
-  saveId: "sv_smoke",
-  playerRef: "smoke-player",
-  metadata: {},
-  state: {},
-  version: 1,
-  createdAt: "2026-05-01T00:00:00.000Z",
-  updatedAt: "2026-05-01T00:00:00.000Z",
-};
-const object: JsonObject = { ok: true };
 const errorPayload: PersistlyErrorPayload = { error: { code: "invalid_request", message: "smoke" } };
 const runtimeConfig: RuntimeConfig | undefined = undefined;
-const localStorageLike: LocalStorageLike | undefined = undefined;
 const accountState: PersistlyAccountState | undefined = undefined;
 
 void policy;
-void snapshot;
-void object;
 void errorPayload;
 void runtimeConfig;
-void localStorageLike;
 void accountState;
 void PersistlyClient;
 void PersistlyGameSaves;
-void LocalStorageSaveCache;
 void PersistlyGameSaveStatus.Synced;
 void PersistlySyncStatus.Accepted;
 `,
@@ -77,12 +59,8 @@ void PersistlySyncStatus.Accepted;
 const subpaths = [
   "@persistlyapp/sdk/account",
   "@persistlyapp/sdk/autosave",
-  "@persistlyapp/sdk/cache",
   "@persistlyapp/sdk/client",
-  "@persistlyapp/sdk/file-cache",
   "@persistlyapp/sdk/game-saves",
-  "@persistlyapp/sdk/local-storage-cache",
-  "@persistlyapp/sdk/schema",
 ];
 await writeFile(
   join(workspace, "subpaths.mjs"),
@@ -94,6 +72,31 @@ await execFileAsync(
   { cwd: workspace },
 );
 await execFileAsync("node", ["subpaths.mjs"], {
+  cwd: workspace,
+  encoding: "utf8",
+});
+await writeFile(
+  join(workspace, "private-subpaths.mjs"),
+  `const privateSubpaths = [
+  "@persistlyapp/sdk/cache",
+  "@persistlyapp/sdk/file-cache",
+  "@persistlyapp/sdk/local-storage-cache",
+  "@persistlyapp/sdk/schema",
+];
+
+for (const specifier of privateSubpaths) {
+  try {
+    await import(specifier);
+    throw new Error(specifier + " should not be exported");
+  } catch (error) {
+    if (!String(error).includes("Package subpath")) {
+      throw error;
+    }
+  }
+}
+`,
+);
+await execFileAsync("node", ["private-subpaths.mjs"], {
   cwd: workspace,
   encoding: "utf8",
 });

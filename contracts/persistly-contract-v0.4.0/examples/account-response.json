@@ -13,9 +13,9 @@
       {
         "slotId": "autosave",
         "slotInfo": {
-          "characterName": "Ayla",
-          "className": "Mage",
-          "level": 5
+          "label": "Autosave",
+          "level": 5,
+          "location": "Crystal Vault"
         },
         "version": 1,
         "status": "active",
@@ -27,9 +27,9 @@
   "slot": {
     "slotId": "autosave",
     "slotInfo": {
-      "characterName": "Ayla",
-      "className": "Mage",
-      "level": 5
+      "label": "Autosave",
+      "level": 5,
+      "location": "Crystal Vault"
     },
     "data": {
       "checkpoint": "vault",

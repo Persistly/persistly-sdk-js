@@ -1,9 +1,9 @@
 {
   "baseVersion": 1,
   "slotInfo": {
-    "characterName": "Ayla",
-    "className": "Mage",
-    "level": 6
+    "label": "Autosave",
+    "level": 6,
+    "location": "Reactor"
   },
   "data": {
     "checkpoint": "reactor",

@@ -14,9 +14,9 @@ const expectedExampleSet = "strict";
 const requiredPaths = new Set([
   "openapi/persistly-api.yaml",
   "limits/runtime-limits.json",
-  "examples/create-save.json",
-  "examples/sync-save.json",
-  "examples/save-response.json",
+  "examples/create-account.json",
+  "examples/sync-slot.json",
+  "examples/account-response.json",
   "examples/conflict-response.json",
   "examples/error-response.json",
 ]);

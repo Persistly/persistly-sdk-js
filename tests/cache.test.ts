@@ -4,7 +4,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { FileSaveCache, LocalStorageSaveCache, MemorySaveCache, type LocalStorageLike, type SaveSnapshot } from "../src/index.js";
+import { MemorySaveCache, type SaveSnapshot } from "../src/cache.js";
+import { FileSaveCache } from "../src/file-cache.js";
+import { LocalStorageSaveCache, type LocalStorageLike } from "../src/local-storage-cache.js";
 
 const snapshot: SaveSnapshot = {
   saveId: "sv_cache",

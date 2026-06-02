@@ -5,14 +5,19 @@
   "exampleSet": "strict",
   "files": [
     {
-      "path": "examples/conflict-response.json",
-      "sha256": "e8daa342565e68c7c447efbae3cd7c4ef7716ba65d52ee21009285e240a494ba",
-      "bytes": 384
+      "path": "examples/account-response.json",
+      "sha256": "cff892e4c7fdbc4051aba6019f1eae188c8e2c792b3b83eacd07703c2d4f3044",
+      "bytes": 1057
     },
     {
-      "path": "examples/create-save.json",
-      "sha256": "741b7556dd278713ad743917af8c6c943dfa388d354120a0d62fcc5f65f7fbb7",
-      "bytes": 333
+      "path": "examples/conflict-response.json",
+      "sha256": "c4a8a2a6f545803493ef4662ec5e050827dda0f63aa94d969d9da92c05b42b17",
+      "bytes": 872
+    },
+    {
+      "path": "examples/create-account.json",
+      "sha256": "6246b7c306f5a5180a3a0c47a432fdcba16f415bb4b93a5cbe7e8ac799a1c8f6",
+      "bytes": 337
     },
     {
       "path": "examples/error-response.json",
@@ -20,24 +25,19 @@
       "bytes": 182
     },
     {
-      "path": "examples/save-response.json",
-      "sha256": "c666f15a0f7a07f89714bc886d914245668e11a091f1493fb879e741466cd704",
-      "bytes": 1049
-    },
-    {
-      "path": "examples/sync-save.json",
-      "sha256": "ec6c8e3c0c569bfb5694e3ef2560a169905caee979bfe2c17e73d1f7438431b4",
-      "bytes": 176
+      "path": "examples/sync-slot.json",
+      "sha256": "38c70ddd2c78d26e218cf92b7b019ba6a6c2edeb39dfc27b855bc5672cde3387",
+      "bytes": 174
     },
     {
       "path": "limits/runtime-limits.json",
-      "sha256": "1b2efed9336be3542b5e77a62c90d860489980735f504ebf81d4f5f3c0399c6d",
-      "bytes": 2794
+      "sha256": "d870d3f7b1a9f1aa8fbeb568f4c87b6fede0b781a4148e05b666f545d1d9805a",
+      "bytes": 2742
     },
     {
       "path": "openapi/persistly-api.yaml",
-      "sha256": "9dc841c0e319a2112e1e20979a3ea49f3e824aace54b405ef8d408f433195d6d",
-      "bytes": 35891
+      "sha256": "504dd5f4be102ec0f049c366ffe31526c97121c7a32c37d3607066a9efa46aea",
+      "bytes": 36921
     }
   ]
 }

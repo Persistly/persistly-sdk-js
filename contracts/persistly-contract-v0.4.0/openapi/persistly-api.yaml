@@ -25,8 +25,6 @@ tags:
     description: Public operational endpoints for availability checks.
   - name: Accounts
     description: Account sessions, accountData, slots, slotInfo, and slot data for player-owned save sync.
-  - name: Save Sync
-    description: Advanced create, load, and sync operations around known save IDs.
   - name: Billing Webhooks
     description: Provider webhook endpoints used by Persistly billing automation.
 paths:
@@ -108,9 +106,9 @@ paths:
                   slot:
                     slotId: autosave
                     slotInfo:
-                      characterName: Ayla
-                      className: Mage
+                      label: Autosave
                       level: 5
+                      location: Crystal Vault
                     data:
                       checkpoint: vault
                       coins: 418
@@ -232,6 +230,77 @@ paths:
           $ref: '#/components/responses/PayloadTooLarge'
         '402':
           $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/accounts/{accountId}/transfer-codes:
+    post:
+      operationId: createAccountTransferCode
+      tags: [Accounts]
+      summary: Create transfer code
+      description: Create a short-lived, single-use transfer code from an existing account session so another device can attach the same account without public lookup.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/AccountId'
+        - $ref: '#/components/parameters/AccountSession'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransferCodeRequest'
+      responses:
+        '201':
+          description: Transfer code created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateTransferCodeResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/account-transfer-codes/consume:
+    post:
+      operationId: consumeAccountTransferCode
+      tags: [Accounts]
+      summary: Consume transfer code
+      description: Consume a short-lived account transfer code and issue a new account session token for the same account. This is not username, playerRef, or externalAccountRef lookup.
+      security:
+        - RuntimeKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsumeTransferCodeRequest'
+      responses:
+        '200':
+          description: Transfer code consumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountEnvelopeResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '410':
+          $ref: '#/components/responses/Gone'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -462,115 +531,6 @@ paths:
           $ref: '#/components/responses/RateLimited'
         '500':
           $ref: '#/components/responses/ServerError'
-  /api/v1/saves:
-    post:
-      operationId: createSave
-      tags: [Save Sync]
-      summary: Create save
-      description: Advanced lower-level operation for direct integrations that intentionally manage save ownership outside the account facade.
-      security:
-        - RuntimeKey: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateSaveRequest'
-      responses:
-        '201':
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SaveEnvelopeResponse'
-        '400':
-          $ref: '#/components/responses/InvalidRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '402':
-          $ref: '#/components/responses/PaymentRequired'
-        '413':
-          $ref: '#/components/responses/PayloadTooLarge'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-        '500':
-          $ref: '#/components/responses/ServerError'
-  /api/v1/saves/{saveId}:
-    get:
-      operationId: loadSave
-      tags: [Save Sync]
-      summary: Load save
-      description: Advanced lower-level load for a known saveId.
-      security:
-        - RuntimeKey: []
-      parameters:
-        - name: saveId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Loaded
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SaveEnvelopeResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '402':
-          $ref: '#/components/responses/PaymentRequired'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-        '500':
-          $ref: '#/components/responses/ServerError'
-  /api/v1/saves/{saveId}/sync:
-    post:
-      operationId: syncSave
-      tags: [Save Sync]
-      summary: Sync save
-      description: Advanced lower-level sync for a known saveId using baseVersion for optimistic concurrency.
-      security:
-        - RuntimeKey: []
-      parameters:
-        - name: saveId
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SyncSaveRequest'
-      responses:
-        '200':
-          description: Accepted
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncAcceptedResponse'
-        '409':
-          description: Conflict
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncConflictResponse'
-        '400':
-          $ref: '#/components/responses/InvalidRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '413':
-          $ref: '#/components/responses/PayloadTooLarge'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-        '500':
-          $ref: '#/components/responses/ServerError'
   /webhooks/stripe:
     post:
       operationId: handleStripeWebhook
@@ -633,61 +593,6 @@ components:
       properties:
         ok:
           type: boolean
-    Save:
-      type: object
-      required: [saveId, playerRef, metadata, state, version, createdAt, updatedAt]
-      properties:
-        saveId:
-          type: string
-        playerRef:
-          type: [string, "null"]
-          description: Optional developer-owned, non-secret player/account reference. It is not an authentication identity and is not queryable through the public runtime API.
-        metadata:
-          type: object
-          x-max-bytes: 16384
-          additionalProperties: true
-        state:
-          type: object
-          x-max-bytes: 262144
-          additionalProperties: true
-        version:
-          type: integer
-          minimum: 1
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-    CreateSaveRequest:
-      type: object
-      required: [state]
-      properties:
-        playerRef:
-          type: string
-        metadata:
-          type: object
-          x-max-bytes: 16384
-          additionalProperties: true
-        state:
-          type: object
-          x-max-bytes: 262144
-          additionalProperties: true
-    SyncSaveRequest:
-      type: object
-      required: [baseVersion, state]
-      properties:
-        baseVersion:
-          type: integer
-          minimum: 1
-        metadata:
-          type: object
-          x-max-bytes: 16384
-          additionalProperties: true
-        state:
-          type: object
-          x-max-bytes: 262144
-          additionalProperties: true
     ExternalAccountRef:
       type: object
       required: [provider, subject]
@@ -822,6 +727,44 @@ components:
           type: object
           x-max-bytes: 262144
           additionalProperties: true
+    CreateTransferCodeRequest:
+      type: object
+      properties:
+        deviceLabel:
+          type: string
+          maxLength: 80
+          description: Optional player-visible device label for activity/audit context. Do not send secrets.
+        ttlSeconds:
+          type: integer
+          minimum: 60
+          maximum: 1800
+          description: Optional requested expiry. Persistly may clamp this to the project default.
+    CreateTransferCodeResponse:
+      type: object
+      required: [transferCode, expiresAt, expiresInSeconds]
+      properties:
+        transferCode:
+          type: string
+          description: Short-lived one-time code. Show it to the player once; do not log it.
+          example: P7K2D-M9Q4R
+        expiresAt:
+          type: string
+          format: date-time
+        expiresInSeconds:
+          type: integer
+          minimum: 1
+    ConsumeTransferCodeRequest:
+      type: object
+      required: [transferCode]
+      properties:
+        transferCode:
+          type: string
+          description: Short-lived one-time code from the device that already has the account session.
+          example: P7K2D-M9Q4R
+        deviceLabel:
+          type: string
+          maxLength: 80
+          description: Optional player-visible label for the new device/session.
     AccountSlotSummary:
       type: object
       required: [slotId, slotInfo, version, status, updatedAt]
@@ -946,46 +889,92 @@ components:
           type: array
           items:
             type: string
-    SyncConflictResponse:
-      type: object
-      required: [status, save, details]
-      properties:
-        status:
-          type: string
-          enum: [conflict]
-        save:
-          $ref: '#/components/schemas/Save'
-        details:
-          $ref: '#/components/schemas/ConflictDetails'
     AccountConflictResponse:
       type: object
-      required: [status, account, details]
+      required: [status, account, version, updatedAt, details]
       properties:
         status:
           type: string
           enum: [conflict]
         account:
           $ref: '#/components/schemas/AccountResponse'
+        version:
+          type: integer
+          minimum: 1
+        updatedAt:
+          type: string
+          format: date-time
         details:
-          $ref: '#/components/schemas/ConflictDetails'
+          $ref: '#/components/schemas/AccountConflictDetails'
     SlotConflictResponse:
       type: object
-      required: [status, slot, details]
+      required: [status, slot, version, updatedAt, details]
       properties:
         status:
           type: string
           enum: [conflict]
         slot:
           $ref: '#/components/schemas/SlotResponse'
+        version:
+          type: integer
+          minimum: 1
+        updatedAt:
+          type: string
+          format: date-time
         details:
-          $ref: '#/components/schemas/ConflictDetails'
-    ConflictDetails:
+          $ref: '#/components/schemas/SlotConflictDetails'
+    AccountConflictDetails:
       type: object
-      required: [reason]
+      required: [reason, serverAccountData]
+      description: Conflict branches for account-wide data. The client branch is either the submitted replacement object or the submitted patch.
+      oneOf:
+        - required: [clientAccountData]
+        - required: [clientAccountDataPatch]
       properties:
         reason:
           type: string
           enum: [base_version_mismatch]
+        serverAccountData:
+          type: object
+          additionalProperties: true
+        clientAccountData:
+          type: object
+          additionalProperties: true
+        clientAccountDataPatch:
+          type: object
+          additionalProperties: true
+    SlotConflictDetails:
+      type: object
+      required: [reason, serverSlot, clientSlot]
+      description: Conflict branches for one slot. The server branch includes the current slot preview and full data; the client branch includes submitted data and optional slotInfo.
+      properties:
+        reason:
+          type: string
+          enum: [base_version_mismatch]
+        serverSlot:
+          $ref: '#/components/schemas/ServerSlotConflictBranch'
+        clientSlot:
+          $ref: '#/components/schemas/ClientSlotConflictBranch'
+    ServerSlotConflictBranch:
+      type: object
+      required: [slotInfo, data]
+      properties:
+        slotInfo:
+          type: object
+          additionalProperties: true
+        data:
+          type: object
+          additionalProperties: true
+    ClientSlotConflictBranch:
+      type: object
+      required: [data]
+      properties:
+        slotInfo:
+          type: object
+          additionalProperties: true
+        data:
+          type: object
+          additionalProperties: true
     ErrorResponse:
       type: object
       required: [error]
@@ -996,7 +985,7 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, slot_archived, account_deleted, slot_deleted, rate_limited, monthly_quota_exceeded, payload_too_large, server_error]
+              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, slot_archived, account_deleted, account_suspended, slot_deleted, transfer_code_invalid, transfer_code_expired, transfer_code_consumed, transfer_code_rate_limited, transfer_code_disabled, invalid_account_session, rate_limited, monthly_quota_exceeded, payload_too_large, server_error]
             message:
               type: string
             details:
@@ -1093,6 +1082,19 @@ components:
                   message: An active slot already exists for this slotId.
                   details:
                     slotId: autosave
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            slotArchived:
+              summary: Slot is archived
+              value:
+                error:
+                  code: slot_archived
+                  message: Slot is archived.
     PayloadTooLarge:
       description: Payload too large
       content:

@@ -3,19 +3,27 @@ import assert from "node:assert/strict";
 
 import {
   DEFAULT_PERSISTLY_API_BASE_URL,
-  MemorySaveCache,
   PersistlyAccountDeletedError,
   PersistlyClient,
   PersistlySlotArchivedError,
   PersistlySlotDeletedError,
   PersistlySyncStatus,
 } from "../src/index.js";
+import { MemorySaveCache } from "../src/cache.js";
 
 function createJsonResponse(status: number, payload: unknown): Response {
   return new Response(JSON.stringify(payload), {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function requestJsonBody(request: { init?: RequestInit } | undefined): Record<string, unknown> {
+  assert.ok(request?.init?.body);
+  const body = JSON.parse(String(request.init.body)) as Record<string, unknown>;
+  assert.equal("metadata" in body, false);
+  assert.equal("state" in body, false);
+  return body;
 }
 
 const syncPolicy = {
@@ -68,7 +76,7 @@ test("createAccount posts account-first payload and session header routes are ac
   assert.equal(created.accountSessionToken, "pst_session");
   assert.equal(created.slot?.slotId, "autosave");
   assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/accounts`);
-  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+  assert.deepEqual(requestJsonBody(requests[0]), {
     playerRef: "player-184",
     externalAccountRef: { provider: "auth0", subject: "auth0|abc123" },
     accountData: { diamonds: 0 },
@@ -77,6 +85,49 @@ test("createAccount posts account-first payload and session header routes are ac
       slotInfo: { characterName: "Ayla" },
       data: { level: 1 },
     },
+  });
+});
+
+test("createAccountSlot sends slotInfo and data without metadata or state", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return createJsonResponse(201, {
+        accountId: "acc_test",
+        account: {
+          accountId: "acc_test",
+          accountData: {},
+          slots: [{ slotId: "manual-1", slotInfo: { label: "Manual 1" }, version: 1 }],
+          version: 1,
+        },
+        slot: {
+          slotId: "manual-1",
+          slotInfo: { label: "Manual 1" },
+          data: { level: 3 },
+          version: 1,
+          updatedAt: "2026-05-01T00:01:00.000Z",
+        },
+      });
+    },
+  });
+
+  const created = await client.createAccountSlot({
+    accountId: "acc_test",
+    accountSessionToken: "pst_session",
+    slotId: "manual-1",
+    slotInfo: { label: "Manual 1" },
+    data: { level: 3 },
+  });
+
+  assert.equal(created.slot.slotId, "manual-1");
+  assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/accounts/acc_test/slots`);
+  assert.equal(new Headers(requests[0]?.init?.headers).get("x-persistly-account-session"), "pst_session");
+  assert.deepEqual(requestJsonBody(requests[0]), {
+    slotId: "manual-1",
+    slotInfo: { label: "Manual 1" },
+    data: { level: 3 },
   });
 });
 
@@ -120,6 +171,11 @@ test("syncAccountSlot uses account session header and synthesizes accepted slot 
   assert.deepEqual(result.save.state, { level: 2 });
   assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/accounts/acc_test/slots/autosave/sync`);
   assert.equal(new Headers(requests[0]?.init?.headers).get("x-persistly-account-session"), "pst_session");
+  assert.deepEqual(requestJsonBody(requests[0]), {
+    baseVersion: 3,
+    slotInfo: { characterName: "Ayla" },
+    data: { level: 2 },
+  });
 });
 
 test("syncAccountData uses the account data sync route and account session header", async () => {
@@ -153,9 +209,39 @@ test("syncAccountData uses the account data sync route and account session heade
   assert.equal(result.status, PersistlySyncStatus.Accepted);
   assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/accounts/acc_test/data/sync`);
   assert.equal(new Headers(requests[0]?.init?.headers).get("x-persistly-account-session"), "pst_session");
-  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+  assert.deepEqual(requestJsonBody(requests[0]), {
     baseVersion: 4,
     accountData: { diamonds: 50 },
+  });
+});
+
+test("syncAccountData sends accountDataPatch without metadata or state", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return createJsonResponse(200, {
+        status: "accepted",
+        version: 6,
+        updatedAt: "2026-05-01T00:03:00.000Z",
+        historyRetained: true,
+      });
+    },
+  });
+
+  const result = await client.syncAccountData({
+    accountId: "acc_test",
+    accountSessionToken: "pst_session",
+    accountDataPatch: { diamonds: 75 },
+    baseVersion: 5,
+  });
+
+  assert.equal(result.status, PersistlySyncStatus.Accepted);
+  assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/accounts/acc_test/data/sync`);
+  assert.deepEqual(requestJsonBody(requests[0]), {
+    baseVersion: 5,
+    accountDataPatch: { diamonds: 75 },
   });
 });
 

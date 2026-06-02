@@ -3,13 +3,13 @@ import type { JsonObject } from "./schema.js";
 import runtimeLimitsJson from "../contracts/persistly-contract-v0.4.0/limits/runtime-limits.json" with { type: "json" };
 
 interface RuntimeLimits {
-  metadataMaxBytes: number;
-  stateMaxBytes: number;
+  slotInfoMaxBytes: number;
+  slotDataMaxBytes: number;
+  accountDataMaxBytes: number;
   planLimits?: Record<string, {
     accountDataMaxBytes?: number;
-    characterStateMaxBytes?: number;
-    metadataMaxBytes?: number;
-    stateMaxBytes?: number;
+    slotDataMaxBytes?: number;
+    slotInfoMaxBytes?: number;
   }>;
   errorCodes: string[];
   conflictReasons: string[];
@@ -18,17 +18,34 @@ interface RuntimeLimits {
 let cachedLimits: RuntimeLimits | undefined;
 
 export function validatePayloadLimits(payload: {
+  accountData?: JsonObject;
+  slotInfo?: JsonObject;
+  data?: JsonObject;
+  /** @internal */
   metadata?: JsonObject;
+  /** @internal */
   state?: JsonObject;
 }): void {
   const limits = getRuntimeLimits();
 
+  if (payload.accountData) {
+    assertWithinLimit("accountData", payload.accountData, limits.accountDataMaxBytes);
+  }
+
+  if (payload.slotInfo) {
+    assertWithinLimit("slotInfo", payload.slotInfo, limits.slotInfoMaxBytes);
+  }
+
+  if (payload.data) {
+    assertWithinLimit("data", payload.data, limits.slotDataMaxBytes);
+  }
+
   if (payload.metadata) {
-    assertWithinLimit("metadata", payload.metadata, limits.metadataMaxBytes);
+    assertWithinLimit("metadata", payload.metadata, limits.slotInfoMaxBytes);
   }
 
   if (payload.state) {
-    assertWithinLimit("state", payload.state, limits.stateMaxBytes);
+    assertWithinLimit("state", payload.state, limits.slotDataMaxBytes);
   }
 }
 
@@ -40,8 +57,8 @@ function getRuntimeLimits(): RuntimeLimits {
   const value = runtimeLimitsJson as Partial<RuntimeLimits>;
 
   if (
-    typeof value.metadataMaxBytes !== "number" ||
-    typeof value.stateMaxBytes !== "number" ||
+    typeof value.slotInfoMaxBytes !== "number" ||
+    typeof value.slotDataMaxBytes !== "number" ||
     !Array.isArray(value.errorCodes) ||
     !Array.isArray(value.conflictReasons)
   ) {
@@ -49,12 +66,9 @@ function getRuntimeLimits(): RuntimeLimits {
   }
 
   cachedLimits = {
-    metadataMaxBytes: maxPlanLimit(value, "metadataMaxBytes", value.metadataMaxBytes),
-    stateMaxBytes: Math.max(
-      maxPlanLimit(value, "stateMaxBytes", value.stateMaxBytes),
-      maxPlanLimit(value, "accountDataMaxBytes", value.stateMaxBytes),
-      maxPlanLimit(value, "characterStateMaxBytes", value.stateMaxBytes),
-    ),
+    slotInfoMaxBytes: maxPlanLimit(value, "slotInfoMaxBytes", value.slotInfoMaxBytes),
+    slotDataMaxBytes: maxPlanLimit(value, "slotDataMaxBytes", value.slotDataMaxBytes),
+    accountDataMaxBytes: maxPlanLimit(value, "accountDataMaxBytes", value.slotDataMaxBytes),
     ...(isPlanLimits(value.planLimits) ? { planLimits: value.planLimits } : {}),
     errorCodes: value.errorCodes,
     conflictReasons: value.conflictReasons,
@@ -63,18 +77,35 @@ function getRuntimeLimits(): RuntimeLimits {
   return cachedLimits;
 }
 
-function assertWithinLimit(field: "metadata" | "state", payload: JsonObject, maxBytes: number): void {
+type PayloadLimitField = "accountData" | "slotInfo" | "data" | "metadata" | "state";
+
+function assertWithinLimit(field: PayloadLimitField, payload: JsonObject, maxBytes: number): void {
   const serialized = JSON.stringify(payload);
   const size = utf8ByteLength(serialized);
 
   if (size > maxBytes) {
     throw new PersistlyPayloadTooLargeError(
-      `${field === "state" ? "State" : "Metadata"} exceeds the maximum allowed size.`,
+      `${payloadLimitLabel(field)} exceeds the maximum allowed size.`,
       {
         field,
         maxBytes,
       },
     );
+  }
+}
+
+function payloadLimitLabel(field: PayloadLimitField): string {
+  switch (field) {
+    case "accountData":
+      return "Account data";
+    case "slotInfo":
+      return "Slot info";
+    case "data":
+      return "Data";
+    case "state":
+      return "State";
+    case "metadata":
+      return "Metadata";
   }
 }
 
