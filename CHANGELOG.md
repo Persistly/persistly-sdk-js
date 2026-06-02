@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.3
+
+- Fixes the lower-level account-data sync route so `saveAccountData`, `patchAccountData`, and `forceSyncAccount` call the public `/api/v1/accounts/{accountId}/data/sync` endpoint.
+- Adds a route regression test for account-data sync.
+
 ## 0.11.2
 
 - Adds short-lived account transfer-code helpers for moving anonymous saves between browsers/devices without public account lookup.

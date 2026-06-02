@@ -122,6 +122,43 @@ test("syncAccountSlot uses account session header and synthesizes accepted slot 
   assert.equal(new Headers(requests[0]?.init?.headers).get("x-persistly-account-session"), "pst_session");
 });
 
+test("syncAccountData uses the account data sync route and account session header", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return createJsonResponse(200, {
+        status: "accepted",
+        version: 5,
+        updatedAt: "2026-05-01T00:02:00.000Z",
+        historyRetained: true,
+        account: {
+          accountId: "acc_test",
+          accountData: { diamonds: 50 },
+          slots: [],
+          version: 5,
+        },
+      });
+    },
+  });
+
+  const result = await client.syncAccountData({
+    accountId: "acc_test",
+    accountSessionToken: "pst_session",
+    accountData: { diamonds: 50 },
+    baseVersion: 4,
+  });
+
+  assert.equal(result.status, PersistlySyncStatus.Accepted);
+  assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/accounts/acc_test/data/sync`);
+  assert.equal(new Headers(requests[0]?.init?.headers).get("x-persistly-account-session"), "pst_session");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    baseVersion: 4,
+    accountData: { diamonds: 50 },
+  });
+});
+
 test("createTransferCode posts to the account transfer-code route with the account session header", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const client = new PersistlyClient({

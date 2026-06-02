@@ -295,7 +295,7 @@ export class PersistlyClient {
     }
 
     const response = await this.requestRaw(
-      `/api/v1/accounts/${encodeURIComponent(accountId)}/data-sync`,
+      `/api/v1/accounts/${encodeURIComponent(accountId)}/data/sync`,
       {
         method: "POST",
         headers: accountSessionHeaders(payload.accountSessionToken),
