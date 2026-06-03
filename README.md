@@ -3,14 +3,14 @@
 [![CI](https://github.com/Persistly/persistly-sdk-js/actions/workflows/ci.yml/badge.svg)](https://github.com/Persistly/persistly-sdk-js/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/@persistlyapp/sdk.svg)](https://www.npmjs.com/package/@persistlyapp/sdk)
 [![npm provenance](https://img.shields.io/badge/npm%20provenance-ready-2ea44f)](https://docs.npmjs.com/trusted-publishers)
-[![license](https://img.shields.io/github/license/Persistly/persistly-sdk-js.svg)](LICENSE)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![docs](https://img.shields.io/badge/docs-persistly.app-6467f2)](https://docs.persistly.app/sdk/javascript)
 
 JavaScript SDK for Persistly cloud saves in browser games, JavaScript game clients, and JS-based engine wrappers.
 
 Most games should start with `PersistlyGameSaves`: configure once, save data locally, load locally, and sync to Persistly at safe moments. Simple games can use `saveData` and `loadData`. Games with manual saves or multiple slots can use `saveSlot` and `loadSlot`.
 
-This package is `0.11.3` and includes the account-first `persistly-contract-v0.4.0` bundle for release validation.
+This package is `0.11.4` and includes the account-first `persistly-contract-v0.4.0` bundle for release validation.
 
 ## Install
 
@@ -39,12 +39,12 @@ await PersistlyGameSaves.shared.saveData({
 });
 
 const loaded = await PersistlyGameSaves.shared.loadData();
-console.log("Loaded local data:", loaded.data);
+renderGameFromSave(loaded.data);
 
 const sync = await PersistlyGameSaves.shared.forceSyncData();
 
 if (sync.status === PersistlyGameSaveStatus.Synced) {
-  console.log("Synced to Persistly.");
+  showSaveStatus("synced");
 }
 ```
 
@@ -57,8 +57,7 @@ const session = await PersistlyGameSaves.shared.getAccountSession({
   includeToken: true,
 });
 
-console.log(session.accountId);
-// Send session.accountSessionToken to your trusted backend over HTTPS.
+// Send session.accountId and session.accountSessionToken to your trusted backend over HTTPS.
 // Do not log, expose, or publish the session token.
 ```
 

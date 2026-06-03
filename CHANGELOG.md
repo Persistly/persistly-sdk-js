@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.4
+
+- Removes the remaining raw save compatibility exports from the public package surface so release builds stay on account, account session, slot, `slotInfo`, and data terminology.
+- Updates the bundled account-first contract examples and payload-limit validation names to avoid profile-era `state`/`metadata` wording in public diagnostics.
+- Adds public-surface regression coverage for removed compatibility subpath exports.
+- Clarifies README examples so quickstart code uses game-facing render/status helpers and sends account sessions to a trusted backend without logging tokens.
+
 ## 0.11.3
 
 - Fixes the lower-level account-data sync route so `saveAccountData`, `patchAccountData`, and `forceSyncAccount` call the public `/api/v1/accounts/{accountId}/data/sync` endpoint.
