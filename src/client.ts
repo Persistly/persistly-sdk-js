@@ -196,7 +196,7 @@ export interface PersistlyClientOptions {
 }
 
 export const DEFAULT_PERSISTLY_API_BASE_URL = "https://api.persistly.app";
-export const PERSISTLY_JS_SDK_VERSION = "0.10.2";
+export const PERSISTLY_JS_SDK_VERSION = "0.11.5";
 
 export class PersistlyClient {
   private readonly baseUrl: string;
@@ -294,7 +294,7 @@ export class PersistlyClient {
     }
 
     if (response.status === 409 && isSyncConflictPayload(json)) {
-      const result = parseConflictSyncResult(json);
+      const result = parseConflictSyncResult(json, { saveId: accountId });
       await this.cache.set(result.save);
       return result;
     }
@@ -446,7 +446,7 @@ export class PersistlyClient {
     }
 
     if (response.status === 409 && isSyncConflictPayload(json)) {
-      const result = parseConflictSyncResult(json);
+      const result = parseConflictSyncResult(json, { saveId: cacheId });
       await this.cache.set(result.save);
       return result;
     }
@@ -930,6 +930,13 @@ function parseNonNegativeInteger(value: unknown, label: string): number {
   return value;
 }
 
+function parseDateTime(value: unknown, label: string): string {
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
+    throw new PersistlyConfigurationError(`${label} must be a valid date-time string.`);
+  }
+  return value;
+}
+
 type AcceptedSyncResponse = Omit<SyncAcceptedResult, "save"> & { save?: Save };
 
 function parseAcceptedSyncResult(value: unknown): AcceptedSyncResponse {
@@ -1066,7 +1073,7 @@ function cloneJsonObject(value: JsonObject): JsonObject {
   return structuredClone(value);
 }
 
-function parseConflictSyncResult(value: unknown): SyncConflictResult {
+function parseConflictSyncResult(value: unknown, options: { saveId?: string } = {}): SyncConflictResult {
   const record = parseObject(value, "Conflict sync response");
   const details = parseObject(record.details, "Conflict details");
 
@@ -1080,11 +1087,51 @@ function parseConflictSyncResult(value: unknown): SyncConflictResult {
 
   return {
     status: PersistlySyncStatus.Conflict,
-    save: parseSave(record.save),
+    save: parseConflictCanonicalSave(record, options.saveId),
     details: {
       reason: "base_version_mismatch",
     },
   };
+}
+
+function parseConflictCanonicalSave(record: Record<string, unknown>, fallbackSaveId?: string): Save {
+  if (record.save !== undefined) {
+    return parseSave(record.save);
+  }
+
+  if (record.slot !== undefined) {
+    const slot = parseAccountSlot(record.slot);
+    return {
+      saveId: fallbackSaveId ?? slot.slotId,
+      playerRef: null,
+      metadata: cloneJsonObject(slot.slotInfo),
+      state: cloneJsonObject(slot.data),
+      version: slot.version,
+      createdAt: slot.updatedAt,
+      updatedAt: slot.updatedAt,
+    };
+  }
+
+  if (record.account !== undefined) {
+    const account = parseAccount(record.account);
+    const version = parsePositiveInteger(record.version ?? account.version, "Conflict account version");
+    const updatedAt = parseDateTime(record.updatedAt, "Conflict account updatedAt");
+    return {
+      saveId: fallbackSaveId ?? account.accountId,
+      playerRef: null,
+      metadata: {},
+      state: {
+        schema: "persistly.account.v1",
+        accountData: cloneJsonObject(account.accountData),
+        slots: structuredClone(account.slots) as unknown as JsonObject[],
+      },
+      version,
+      createdAt: updatedAt,
+      updatedAt,
+    };
+  }
+
+  throw new PersistlyConfigurationError("Conflict sync response must include save, slot, or account.");
 }
 
 function isSyncConflictPayload(value: unknown): boolean {

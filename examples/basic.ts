@@ -1,4 +1,4 @@
-import { MemorySaveCache, PersistlyClient, PersistlySyncStatus } from "@persistlyapp/sdk";
+import { PersistlyClient, PersistlySyncStatus } from "@persistlyapp/sdk";
 
 const runtimeKey = process.env.PERSISTLY_RUNTIME_KEY;
 
@@ -8,7 +8,6 @@ if (!runtimeKey) {
 
 const client = new PersistlyClient({
   runtimeKey,
-  cache: new MemorySaveCache(),
 });
 
 const created = await client.createAccount({

@@ -178,6 +178,62 @@ test("syncAccountSlot uses account session header and synthesizes accepted slot 
   });
 });
 
+test("syncAccountSlot synthesizes conflict save from public slot response", async () => {
+  const cache = new MemorySaveCache();
+  await cache.set({
+    saveId: "acc_test:autosave",
+    playerRef: null,
+    metadata: { characterName: "Ayla" },
+    state: { level: 1 },
+    version: 1,
+    createdAt: "2026-05-01T00:00:00.000Z",
+    updatedAt: "2026-05-01T00:00:00.000Z",
+  });
+
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    cache,
+    fetch: async () => createJsonResponse(409, {
+      status: "conflict",
+      slot: {
+        slotId: "autosave",
+        slotInfo: { characterName: "Ayla", level: 2 },
+        data: { level: 2 },
+        version: 2,
+        status: "active",
+        updatedAt: "2026-05-01T00:01:00.000Z",
+      },
+      version: 2,
+      updatedAt: "2026-05-01T00:01:00.000Z",
+      details: {
+        reason: "base_version_mismatch",
+        serverSlot: {
+          slotInfo: { characterName: "Ayla", level: 2 },
+          data: { level: 2 },
+        },
+        clientSlot: {
+          slotInfo: { characterName: "Ayla", level: 99 },
+          data: { level: 99 },
+        },
+      },
+    }),
+  });
+
+  const result = await client.syncAccountSlot({
+    accountId: "acc_test",
+    accountSessionToken: "pst_session",
+    slotId: "autosave",
+    baseVersion: 1,
+    slotInfo: { characterName: "Ayla", level: 99 },
+    data: { level: 99 },
+  });
+
+  assert.equal(result.status, PersistlySyncStatus.Conflict);
+  assert.equal(result.save.saveId, "acc_test:autosave");
+  assert.equal(result.save.version, 2);
+  assert.deepEqual(result.save.state, { level: 2 });
+});
+
 test("syncAccountData uses the account data sync route and account session header", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const client = new PersistlyClient({

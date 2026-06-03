@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.5
+
+- Fixes lower-level account/slot conflict parsing so current public conflict responses with top-level `slot` or `account` fields work without expecting legacy raw `save` payloads.
+- Updates live examples to use the public package surface without importing internal cache helpers.
+- Updates the SDK diagnostics version constant to match the published package version.
+
 ## 0.11.4
 
 - Removes the remaining raw save compatibility exports from the public package surface so release builds stay on account, account session, slot, `slotInfo`, and data terminology.
