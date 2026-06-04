@@ -16,7 +16,6 @@
     </filter>
   </defs>
   <rect width="1200" height="400" fill="#1e293b"/>
-  <rect x="0.5" y="0.5" width="1199" height="399" rx="14" fill="none" stroke="#ffffff" stroke-opacity="0.10"/>
   <g transform="translate(600 118)" filter="url(#logo-glow)">
     <path d="M0 -28 24 -14v28L0 28-24 14v-28Z" fill="none" stroke="#6366f1" stroke-width="3"/>
     <path d="M0 -19 17 -10v20L0 19-17 10v-20Z" fill="none" stroke="#8b5cf6" stroke-width="3"/>
