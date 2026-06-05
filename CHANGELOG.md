@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.0
+
+- Marks the JavaScript SDK as the first stable Persistly browser-game SDK release.
+- Keeps the account-first public surface introduced in the `0.11.x` release line: `PersistlyGameSaves`, one-save helpers, named slots, account data, transfer codes, and conflict helpers.
+- Ships the account/slot runtime contract bundle, local-first templates, public README examples, and SDK diagnostics version `1.0.0`.
+- Publishes under `@persistlyapp/sdk` with npm provenance through GitHub Trusted Publishing.
+
 ## 0.11.5
 
 - Fixes lower-level account/slot conflict parsing so current public conflict responses with top-level `slot` or `account` fields work without expecting legacy raw `save` payloads.
