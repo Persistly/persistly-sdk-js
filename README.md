@@ -22,6 +22,36 @@ This package is `1.0.0` and includes the account-first `persistly-contract-v0.4.
 npm install @persistlyapp/sdk
 ```
 
+### Browser Module CDN
+
+For prototypes, plain HTML demos, and quick playgrounds, you can import the ESM build through jsDelivr:
+
+```html
+<script type="module">
+  import {
+    PersistlyGameSaveStatus,
+    PersistlyGameSaves,
+  } from "https://cdn.jsdelivr.net/npm/@persistlyapp/sdk@1/+esm";
+
+  await PersistlyGameSaves.configure({
+    runtimeKey: "ps_test_replace_me",
+  });
+
+  await PersistlyGameSaves.shared.saveData({
+    level: 1,
+    coins: 50,
+  });
+
+  const sync = await PersistlyGameSaves.shared.forceSyncData();
+
+  if (sync.status === PersistlyGameSaveStatus.Synced) {
+    console.log("Synced to Persistly.");
+  }
+</script>
+```
+
+Use npm for production apps when possible. Use jsDelivr for small demos, no-build examples, or environments where adding a bundler is unnecessary.
+
 ## Quickstart
 
 ```ts
