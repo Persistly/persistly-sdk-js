@@ -25,6 +25,8 @@ tags:
     description: Public operational endpoints for availability checks.
   - name: Accounts
     description: Account sessions, accountData, slots, slotInfo, and slot data for player-owned save sync.
+  - name: Account Auth
+    description: Provider-token exchange for account sessions.
   - name: Billing Webhooks
     description: Provider webhook endpoints used by Persistly billing automation.
 paths:
@@ -127,6 +129,131 @@ paths:
           $ref: '#/components/responses/PaymentRequired'
         '413':
           $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/accounts/auth/session:
+    post:
+      operationId: exchangeAccountAuthSession
+      tags: [Account Auth]
+      summary: Exchange provider token for account session
+      description: |
+        Verify a configured Google or OIDC/JWT provider token and return a normal Persistly account session.
+        SDK helpers are preferred for most games. Direct HTTP is intended for custom engines,
+        custom SDKs, and advanced integrations that intentionally manage accountId and accountSessionToken.
+
+        To link a verified identity to the current account, send both X-Persistly-Account-ID and
+        X-Persistly-Account-Session headers. Do not send accountId or accountSessionToken in the JSON body.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/AccountIdHeader'
+        - $ref: '#/components/parameters/AccountSessionOptional'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthSessionRequest'
+            examples:
+              google:
+                summary: Google ID token exchange
+                value:
+                  provider: google
+                  token: PROVIDER_ID_TOKEN_PLACEHOLDER
+                  deviceLabel: iPhone
+              oidc:
+                summary: Generic OIDC/JWT token exchange
+                value:
+                  provider: oidc_jwt
+                  token: PROVIDER_JWT_PLACEHOLDER
+                  deviceLabel: Steam Deck
+      responses:
+        '200':
+          description: Account session issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSessionResponse'
+              examples:
+                linked:
+                  summary: Existing or newly linked account session
+                  value:
+                    accountId: acc_01HXYZ
+                    accountSessionToken: pst_01HSESSION
+                    isNewAccount: false
+                    linkedProvider: google
+                    wasProviderNewForAccount: true
+        '400':
+          description: Invalid request or provider token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidProvider:
+                  summary: Unknown provider key
+                  value:
+                    error:
+                      code: invalid_request
+                      message: provider must be a supported auth provider.
+                      details:
+                        field: provider
+                invalidToken:
+                  summary: Provider token failed verification
+                  value:
+                    error:
+                      code: provider_token_invalid
+                      message: Provider token is invalid.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
+        '403':
+          $ref: '#/components/responses/AuthProviderNotConfigured'
+        '409':
+          $ref: '#/components/responses/AccountAuthConflict'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+  /api/v1/accounts/auth/providers:
+    get:
+      operationId: listAccountAuthProviders
+      tags: [Account Auth]
+      summary: List linked auth providers for the current account
+      description: |
+        Return safe provider metadata for the current Persistly account session.
+        The response excludes raw provider subjects, hashes, tokens, slot data, account data, and internal save ids.
+      security:
+        - RuntimeKey: []
+      parameters:
+        - $ref: '#/components/parameters/AccountIdHeader'
+        - $ref: '#/components/parameters/AccountSession'
+      responses:
+        '200':
+          description: Linked providers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LinkedAuthProvider'
+              examples:
+                default:
+                  summary: Linked Google provider
+                  value:
+                    - provider: google
+                      display:
+                        label: Google
+                        emailHint: a***@gmail.com
+                      linkedAt: "2026-06-06T12:00:00Z"
+                      lastUsedAt: "2026-06-06T12:30:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '402':
+          $ref: '#/components/responses/PaymentRequired'
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -586,6 +713,21 @@ components:
       schema:
         type: string
       description: Per-device account session token returned when an account is created.
+    AccountSessionOptional:
+      name: X-Persistly-Account-Session
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Optional current account session token. Use with X-Persistly-Account-ID when linking an auth identity to the current account.
+    AccountIdHeader:
+      name: X-Persistly-Account-ID
+      in: header
+      required: false
+      schema:
+        type: string
+        pattern: ^acc_[A-Za-z0-9_.-]+$
+      description: Optional current account id. Use with X-Persistly-Account-Session when linking an auth identity to the current account.
   schemas:
     HealthResponse:
       type: object
@@ -665,6 +807,63 @@ components:
           additionalProperties: true
         slot:
           $ref: '#/components/schemas/CreateAccountInitialSlot'
+    AuthProvider:
+      type: string
+      enum: [google, oidc_jwt]
+    AuthSessionRequest:
+      type: object
+      required: [provider, token]
+      description: Provider token exchange request. Do not include accountId or accountSessionToken in the JSON body; use headers for current account linking.
+      properties:
+        provider:
+          $ref: '#/components/schemas/AuthProvider'
+        token:
+          type: string
+          description: Raw provider token from Google or a configured OIDC/JWT provider. Never log or persist this value.
+        deviceLabel:
+          type: string
+          maxLength: 80
+          description: Optional player-visible device label for the issued account session.
+      additionalProperties: false
+    AuthSessionResponse:
+      type: object
+      required: [accountId, accountSessionToken, isNewAccount, linkedProvider, wasProviderNewForAccount]
+      properties:
+        accountId:
+          type: string
+          pattern: ^acc_[A-Za-z0-9_.-]+$
+        accountSessionToken:
+          type: string
+          description: Normal Persistly account session token for subsequent account/slot routes. Store locally; do not log it.
+        isNewAccount:
+          type: boolean
+          description: True when the exchange created a new account because there was no current valid account session and no existing identity link.
+        linkedProvider:
+          $ref: '#/components/schemas/AuthProvider'
+        wasProviderNewForAccount:
+          type: boolean
+          description: True when this provider identity was newly linked to the returned account.
+    LinkedAuthProvider:
+      type: object
+      required: [provider, display, linkedAt]
+      properties:
+        provider:
+          $ref: '#/components/schemas/AuthProvider'
+        display:
+          type: object
+          required: [label]
+          properties:
+            label:
+              type: string
+            emailHint:
+              type: string
+          additionalProperties: false
+        linkedAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
     CreateAccountInitialSlot:
       type: object
       required: [slotId, data]
@@ -985,12 +1184,60 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, slot_archived, account_deleted, account_suspended, slot_deleted, transfer_code_invalid, transfer_code_expired, transfer_code_consumed, transfer_code_rate_limited, transfer_code_disabled, invalid_account_session, rate_limited, monthly_quota_exceeded, payload_too_large, server_error]
+              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, slot_archived, account_deleted, account_suspended, slot_deleted, transfer_code_invalid, transfer_code_expired, transfer_code_consumed, transfer_code_rate_limited, transfer_code_disabled, invalid_account_session, provider_token_invalid, auth_provider_not_configured, account_auth_conflict, rate_limited, monthly_quota_exceeded, payload_too_large, server_error]
             message:
               type: string
             details:
               type: object
               additionalProperties: true
+    AccountAuthConflictResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, details]
+          properties:
+            code:
+              type: string
+              enum: [account_auth_conflict]
+            message:
+              type: string
+            details:
+              type: object
+              required: [summary]
+              properties:
+                summary:
+                  $ref: '#/components/schemas/AccountAuthConflictSummary'
+    AccountAuthConflictSummary:
+      type: object
+      required: [linkedProvider, linkedProviderCount, linkedAccount]
+      description: Safe conflict summary. It intentionally excludes slotInfo, data, provider subject, subject hashes, raw tokens, and internal ids.
+      properties:
+        linkedProvider:
+          $ref: '#/components/schemas/AuthProvider'
+        linkedProviderCount:
+          type: integer
+          minimum: 1
+        linkedAccount:
+          type: object
+          required: [activeSlotCount]
+          properties:
+            activeSlotCount:
+              type: integer
+              minimum: 0
+            lastActivityAt:
+              type: string
+              format: date-time
+        firstLinkedAt:
+          type: string
+          format: date-time
+        lastLinkedAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
   responses:
     InvalidRequest:
       description: Invalid request
@@ -1044,6 +1291,44 @@ components:
                 error:
                   code: forbidden
                   message: Account session cannot access this resource.
+    AuthProviderNotConfigured:
+      description: Auth provider is not configured or not enabled for this runtime key environment
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              summary: Provider missing or disabled
+              value:
+                error:
+                  code: auth_provider_not_configured
+                  message: Auth provider is not configured for this environment.
+                  details:
+                    provider: google
+    AccountAuthConflict:
+      description: Provider identity is already linked to a different account
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AccountAuthConflictResponse'
+          examples:
+            default:
+              summary: Identity linked to another account
+              value:
+                error:
+                  code: account_auth_conflict
+                  message: Auth identity is already linked to another account.
+                  details:
+                    summary:
+                      linkedProvider: google
+                      linkedProviderCount: 1
+                      linkedAccount:
+                        activeSlotCount: 3
+                        lastActivityAt: "2026-06-06T12:30:00Z"
+                      firstLinkedAt: "2026-06-06T12:00:00Z"
+                      lastLinkedAt: "2026-06-06T12:00:00Z"
+                      lastUsedAt: "2026-06-06T12:30:00Z"
     Gone:
       description: Deleted resource
       content:
