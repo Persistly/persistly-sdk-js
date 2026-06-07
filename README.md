@@ -120,6 +120,56 @@ await PersistlyGameSaves.shared.attachWithTransferCode(transfer.transferCode);
 
 Use `clearLocalAccount()` for local sign-out only. Use `deleteAccount()` for permanent remote erasure. Use `archiveSlot(slotId)` to retire an active slot and `deleteSlot(slotId)` to permanently erase one slot.
 
+## Auth Bridge
+
+Use Auth Bridge when your game already signs players in with Google or another OIDC/JWT provider. Persistly verifies the provider token once, then returns a normal Persistly account session. Save, load, and sync calls do not send provider tokens.
+
+```ts
+await PersistlyGameSaves.configure({
+  runtimeKey: "ps_test_replace_me",
+  accountMode: "authRequired",
+});
+
+// Get this token from your Google Sign-In flow.
+await PersistlyGameSaves.shared.signInWithGoogleIdToken(googleIdToken, {
+  deviceLabel: "Browser",
+});
+
+await PersistlyGameSaves.shared.saveData({
+  level: 5,
+  coins: 1200,
+});
+
+await PersistlyGameSaves.shared.forceSyncData();
+```
+
+Generic OIDC/JWT providers use the same shape:
+
+```ts
+await PersistlyGameSaves.shared.signInWithProvider({
+  provider: "oidc_jwt",
+  token: providerJwt,
+  deviceLabel: "Steam Deck",
+});
+```
+
+To attach an additional provider to the current Persistly account:
+
+```ts
+await PersistlyGameSaves.shared.linkProvider({
+  provider: "google",
+  token: googleIdToken,
+});
+```
+
+To show already-linked providers in an account settings screen:
+
+```ts
+const providers = await PersistlyGameSaves.shared.listLinkedProviders();
+```
+
+Use `signOut()` to clear Persistly local account and slot data from the current device.
+
 ## Account Data
 
 Use account data for account-wide gameplay values such as unlocked slots, settings, shared inventory, or premium balance after trusted purchase validation.
@@ -140,6 +190,7 @@ await PersistlyGameSaves.shared.forceSyncAccount();
 - `templates/one-save` for idle, casual, and one-save games.
 - `templates/multi-slot` for manual saves, campaigns, and slot select screens.
 - `templates/account-slots` for games with sign-in or cross-device restore.
+- `templates/auth-required` for games that require provider sign-in before cloud sync.
 
 ## Advanced Runtime Client
 

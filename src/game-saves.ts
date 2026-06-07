@@ -8,6 +8,14 @@ import {
   type Save,
   type SyncPolicy,
 } from "./client.js";
+import type {
+  LinkProviderInput,
+  PersistlyAccountMode,
+  PersistlyAuthOptions,
+  PersistlyAuthSessionResult,
+  PersistlyLinkedProvider,
+  SignInWithProviderInput,
+} from "./auth.js";
 import {
   PersistlyApiError,
   PersistlyConfigurationError,
@@ -27,6 +35,7 @@ export const PersistlyGameSaveStatus = {
   Cooldown: "cooldown",
   Synced: "synced",
   Conflict: "conflict",
+  AuthRequired: "auth_required",
   Offline: "offline",
   RateLimited: "rate_limited",
 } as const;
@@ -56,6 +65,7 @@ export interface PersistlyGameSavesConfig {
   localAccountKey?: string;
   accountId?: string;
   accountSessionToken?: string;
+  accountMode?: PersistlyAccountMode;
   storage?: PersistlyGameSavesStorage;
   storageHelper?: LocalStorageLike;
   fetch?: typeof globalThis.fetch;
@@ -184,6 +194,13 @@ export type PersistlyGameSaveSyncResult =
       cloudSave: Save;
     }
   | {
+      status: typeof PersistlyGameSaveStatus.AuthRequired;
+      target: PersistlyGameSaveTargetValue;
+      slotId?: string;
+      /** @internal */
+      slotKey?: string;
+    }
+  | {
       status: typeof PersistlyGameSaveStatus.Offline;
       target: PersistlyGameSaveTargetValue;
       slotId?: string;
@@ -258,6 +275,11 @@ interface PersistlyGameSavesFacade {
     transferCode: string,
     options?: PersistlyAttachWithTransferCodeOptions,
   ): Promise<PersistlyEnsureAccountResult>;
+  signInWithGoogleIdToken(idToken: string, options?: PersistlyAuthOptions): Promise<PersistlyAuthSessionResult>;
+  signInWithProvider(input: SignInWithProviderInput): Promise<PersistlyAuthSessionResult>;
+  linkProvider(input: LinkProviderInput): Promise<PersistlyAuthSessionResult>;
+  listLinkedProviders(): Promise<PersistlyLinkedProvider[]>;
+  signOut(): Promise<PersistlyGameSaveSyncResult>;
   ensureAccount(): Promise<PersistlyEnsureAccountResult>;
   getAccountSession(options?: { includeToken?: boolean }): Promise<PersistlyAccountSession>;
   getAccountInfo(): Promise<PersistlyAccountInspection>;
@@ -412,6 +434,26 @@ class UnconfiguredPersistlyGameSaves implements PersistlyGameSavesFacade {
   }
 
   async attachWithTransferCode(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async signInWithGoogleIdToken(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async signInWithProvider(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async linkProvider(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async listLinkedProviders(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async signOut(): Promise<never> {
     throwNotConfigured();
   }
 
@@ -636,6 +678,70 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     };
   }
 
+  async signInWithGoogleIdToken(
+    idToken: string,
+    options: PersistlyAuthOptions = {},
+  ): Promise<PersistlyAuthSessionResult> {
+    return await this.signInWithProvider({
+      provider: "google",
+      token: idToken,
+      ...(options.deviceLabel === undefined ? {} : { deviceLabel: options.deviceLabel }),
+    });
+  }
+
+  async signInWithProvider(input: SignInWithProviderInput): Promise<PersistlyAuthSessionResult> {
+    const account = await this.getOrCreateLocalAccount();
+    const result = await this.client.exchangeAccountAuthSession({
+      ...input,
+      ...(hasAccountSession(account)
+        ? {
+            accountId: account.accountId,
+            accountSessionToken: account.accountSessionToken,
+          }
+        : {}),
+    });
+    await this.store.setAccount({
+      ...account,
+      accountId: result.accountId,
+      accountSessionToken: result.accountSessionToken,
+      dirty: account.dirty,
+    });
+    return result;
+  }
+
+  async linkProvider(input: LinkProviderInput): Promise<PersistlyAuthSessionResult> {
+    const account = await this.getOrCreateLocalAccount();
+    if (!hasAccountSession(account)) {
+      throw new PersistlyConfigurationError("linkProvider requires accountId and accountSessionToken.");
+    }
+    const result = await this.client.exchangeAccountAuthSession({
+      ...input,
+      accountId: account.accountId,
+      accountSessionToken: account.accountSessionToken,
+    });
+    await this.store.setAccount({
+      ...account,
+      accountId: result.accountId,
+      accountSessionToken: result.accountSessionToken,
+    });
+    return result;
+  }
+
+  async listLinkedProviders(): Promise<PersistlyLinkedProvider[]> {
+    const account = await this.getOrCreateLocalAccount();
+    if (!hasAccountSession(account)) {
+      throw new PersistlyConfigurationError("listLinkedProviders requires accountId and accountSessionToken.");
+    }
+    return await this.client.listLinkedAuthProviders({
+      accountId: account.accountId,
+      accountSessionToken: account.accountSessionToken,
+    });
+  }
+
+  async signOut(): Promise<PersistlyGameSaveSyncResult> {
+    return await this.clearLocalAccount();
+  }
+
   async ensureAccount(): Promise<PersistlyEnsureAccountResult> {
     const existing = await this.getOrCreateLocalAccount();
     if (existing.accountId && existing.accountSessionToken && existing.version !== undefined) {
@@ -758,6 +864,9 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       }
 
       if (!account.accountId || !account.accountSessionToken) {
+        if (this.requiresAuthSession()) {
+          return this.emit({ status: PersistlyGameSaveStatus.AuthRequired, target: PersistlyGameSaveTarget.Account });
+        }
         const synced = await this.createRemoteAccount(account);
         return this.emit({
           status: PersistlyGameSaveStatus.Synced,
@@ -1194,6 +1303,9 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
   private async createAccountOrSlot(slot: SlotRecord): Promise<PersistlyGameSaveSyncResult> {
     let account = await this.getOrCreateLocalAccount();
     if (!account.accountId || !account.accountSessionToken) {
+      if (this.requiresAuthSession()) {
+        return { status: PersistlyGameSaveStatus.AuthRequired, target: PersistlyGameSaveTarget.Slot, ...slotIdentity(slot.slotKey) };
+      }
       const envelope = await this.client.createAccount({
         ...(this.config.playerRef === undefined ? {} : { playerRef: this.config.playerRef }),
         ...(this.config.externalAccountRef === undefined ? {} : { externalAccountRef: this.config.externalAccountRef }),
@@ -1351,6 +1463,10 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       account = await this.loadRemoteAccount(account);
     }
     return { ...account, accountId, accountSessionToken };
+  }
+
+  private requiresAuthSession(): boolean {
+    return this.config.accountMode === "authRequired";
   }
 
   private async loadRemoteAccount(account: AccountRecord & { accountId: string; accountSessionToken: string }): Promise<AccountRecord> {

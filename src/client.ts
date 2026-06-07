@@ -9,6 +9,12 @@ import {
   type PersistlyApiError,
   type PersistlyErrorCode,
 } from "./errors.js";
+import type {
+  PersistlyAuthProvider,
+  PersistlyAuthSessionResult,
+  PersistlyLinkedProvider,
+  SignInWithProviderInput,
+} from "./auth.js";
 import { validatePayloadLimits } from "./limits.js";
 import { parseObject as parseSchemaObject, parseSaveSnapshot, type JsonObject, type SaveSnapshot } from "./schema.js";
 
@@ -136,6 +142,11 @@ export interface AccountSessionInput {
   accountSessionToken: string;
 }
 
+export interface AccountAuthSessionInput extends SignInWithProviderInput {
+  accountId?: string;
+  accountSessionToken?: string;
+}
+
 export interface AccountSlotInput extends AccountSessionInput {
   slotId: string;
 }
@@ -244,6 +255,39 @@ export class PersistlyClient {
     const envelope = requireCreatedAccountEnvelope(parseAccountEnvelope(response));
 
     return envelope;
+  }
+
+  async exchangeAccountAuthSession(payload: AccountAuthSessionInput): Promise<PersistlyAuthSessionResult> {
+    const provider = assertAuthProvider(payload.provider, "exchangeAccountAuthSession");
+    const token = assertProviderToken(payload.token, "exchangeAccountAuthSession");
+    if ((payload.accountId === undefined) !== (payload.accountSessionToken === undefined)) {
+      throw new PersistlyConfigurationError(
+        "exchangeAccountAuthSession requires both accountId and accountSessionToken when linking to a current account.",
+      );
+    }
+
+    const response = await this.requestJson("/api/v1/accounts/auth/session", {
+      method: "POST",
+      headers: payload.accountSessionToken === undefined
+        ? {}
+        : accountSessionHeaders(payload.accountSessionToken, payload.accountId),
+      body: JSON.stringify({
+        provider,
+        token,
+        ...(payload.deviceLabel === undefined ? {} : { deviceLabel: payload.deviceLabel }),
+      }),
+    });
+    return parseAuthSessionResult(response);
+  }
+
+  async listLinkedAuthProviders(payload: AccountSessionInput): Promise<PersistlyLinkedProvider[]> {
+    const accountId = assertAccountId(payload.accountId, "listLinkedAuthProviders");
+    assertAccountSessionToken(payload.accountSessionToken, "listLinkedAuthProviders");
+    const response = await this.requestJson("/api/v1/accounts/auth/providers", {
+      method: "GET",
+      headers: accountSessionHeaders(payload.accountSessionToken, accountId),
+    });
+    return parseLinkedAuthProviders(response);
   }
 
   async syncAccountData(payload: SyncAccountDataInput): Promise<SyncSaveResult> {
@@ -591,8 +635,9 @@ function assertTransferCode(code: string, operation: string): string {
   return code.trim();
 }
 
-function accountSessionHeaders(token: string): HeadersInit {
+function accountSessionHeaders(token: string, accountId?: string): HeadersInit {
   return {
+    ...(accountId === undefined ? {} : { "x-persistly-account-id": accountId }),
     "x-persistly-account-session": token,
   };
 }
@@ -1176,6 +1221,82 @@ function transferCodeRequestBody(payload: {
   };
 }
 
+function assertAuthProvider(provider: PersistlyAuthProvider, operation: string): PersistlyAuthProvider {
+  if (provider !== "google" && provider !== "oidc_jwt") {
+    throw new PersistlyConfigurationError(`${operation} provider must be "google" or "oidc_jwt".`);
+  }
+  return provider;
+}
+
+function assertProviderToken(token: string, operation: string): string {
+  if (typeof token !== "string" || token.trim() === "") {
+    throw new PersistlyConfigurationError(`${operation} requires a non-empty provider token.`);
+  }
+  return token;
+}
+
+function parseAuthSessionResult(value: unknown): PersistlyAuthSessionResult {
+  const record = parseObject(value, "Auth session response");
+  const provider = record.linkedProvider;
+  if (typeof record.accountId !== "string" || record.accountId.trim() === "") {
+    throw new PersistlyConfigurationError("Auth session response accountId must be a non-empty string.");
+  }
+  if (typeof record.accountSessionToken !== "string" || record.accountSessionToken.trim() === "") {
+    throw new PersistlyConfigurationError("Auth session response accountSessionToken must be a non-empty string.");
+  }
+  if (provider !== "google" && provider !== "oidc_jwt") {
+    throw new PersistlyConfigurationError("Auth session response linkedProvider must be google or oidc_jwt.");
+  }
+  if (typeof record.isNewAccount !== "boolean") {
+    throw new PersistlyConfigurationError("Auth session response isNewAccount must be a boolean.");
+  }
+  if (typeof record.wasProviderNewForAccount !== "boolean") {
+    throw new PersistlyConfigurationError("Auth session response wasProviderNewForAccount must be a boolean.");
+  }
+  return {
+    accountId: record.accountId,
+    accountSessionToken: record.accountSessionToken,
+    isNewAccount: record.isNewAccount,
+    linkedProvider: provider,
+    wasProviderNewForAccount: record.wasProviderNewForAccount,
+  };
+}
+
+function parseLinkedAuthProviders(value: unknown): PersistlyLinkedProvider[] {
+  if (!Array.isArray(value)) {
+    throw new PersistlyConfigurationError("Linked auth providers response must be an array.");
+  }
+  return value.map((entry, index) => {
+    const record = parseObject(entry, `Linked auth providers response[${index}]`);
+    const provider = record.provider;
+    if (provider !== "google" && provider !== "oidc_jwt") {
+      throw new PersistlyConfigurationError(`Linked auth providers response[${index}].provider must be google or oidc_jwt.`);
+    }
+    const display = parseObject(record.display, `Linked auth providers response[${index}].display`);
+    if (typeof display.label !== "string" || display.label.trim() === "") {
+      throw new PersistlyConfigurationError(`Linked auth providers response[${index}].display.label must be a non-empty string.`);
+    }
+    if (display.emailHint !== undefined && typeof display.emailHint !== "string") {
+      throw new PersistlyConfigurationError(`Linked auth providers response[${index}].display.emailHint must be a string.`);
+    }
+    if (typeof record.linkedAt !== "string" || Number.isNaN(Date.parse(record.linkedAt))) {
+      throw new PersistlyConfigurationError(`Linked auth providers response[${index}].linkedAt must be a date-time string.`);
+    }
+    if (record.lastUsedAt !== undefined && (typeof record.lastUsedAt !== "string" || Number.isNaN(Date.parse(record.lastUsedAt)))) {
+      throw new PersistlyConfigurationError(`Linked auth providers response[${index}].lastUsedAt must be a date-time string.`);
+    }
+    return {
+      provider,
+      display: {
+        label: display.label,
+        ...(display.emailHint === undefined ? {} : { emailHint: display.emailHint }),
+      },
+      linkedAt: record.linkedAt,
+      ...(record.lastUsedAt === undefined ? {} : { lastUsedAt: record.lastUsedAt }),
+    };
+  });
+}
+
 function validateSyncAccountDataPayload(payload: SyncAccountDataInput): void {
   if (payload.accountData !== undefined && payload.accountDataPatch !== undefined) {
     throw new PersistlyConfigurationError("syncAccountData accepts either accountData or accountDataPatch, not both.");
@@ -1237,6 +1358,9 @@ function isPersistlyErrorCode(value: unknown): value is PersistlyErrorCode {
     value === "transfer_code_consumed" ||
     value === "transfer_code_rate_limited" ||
     value === "transfer_code_disabled" ||
+    value === "provider_token_invalid" ||
+    value === "auth_provider_not_configured" ||
+    value === "account_auth_conflict" ||
     value === "rate_limited" ||
     value === "payload_too_large" ||
     value === "server_error"

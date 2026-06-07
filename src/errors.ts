@@ -13,6 +13,9 @@ export type PersistlyErrorCode =
   | "transfer_code_consumed"
   | "transfer_code_rate_limited"
   | "transfer_code_disabled"
+  | "provider_token_invalid"
+  | "auth_provider_not_configured"
+  | "account_auth_conflict"
   | "rate_limited"
   | "payload_too_large"
   | "server_error";
@@ -127,6 +130,27 @@ export class PersistlyTransferCodeDisabledError extends PersistlyApiError {
   }
 }
 
+export class PersistlyProviderTokenInvalidError extends PersistlyApiError {
+  constructor(message: string, details?: Record<string, unknown>, status = 400) {
+    super(status, "provider_token_invalid", message, details);
+    this.name = "PersistlyProviderTokenInvalidError";
+  }
+}
+
+export class PersistlyAuthProviderNotConfiguredError extends PersistlyApiError {
+  constructor(message: string, details?: Record<string, unknown>, status = 403) {
+    super(status, "auth_provider_not_configured", message, details);
+    this.name = "PersistlyAuthProviderNotConfiguredError";
+  }
+}
+
+export class PersistlyAccountAuthConflictError extends PersistlyApiError {
+  constructor(message: string, details?: Record<string, unknown>, status = 409) {
+    super(status, "account_auth_conflict", message, details);
+    this.name = "PersistlyAccountAuthConflictError";
+  }
+}
+
 export class PersistlyRateLimitedError extends PersistlyApiError {
   constructor(message: string, details?: Record<string, unknown>, status = 429) {
     super(status, "rate_limited", message, details);
@@ -212,6 +236,12 @@ export function createPersistlyApiError(
       return new PersistlyTransferCodeRateLimitedError(message, details, status);
     case "transfer_code_disabled":
       return new PersistlyTransferCodeDisabledError(message, details, status);
+    case "provider_token_invalid":
+      return new PersistlyProviderTokenInvalidError(message, details, status);
+    case "auth_provider_not_configured":
+      return new PersistlyAuthProviderNotConfiguredError(message, details, status);
+    case "account_auth_conflict":
+      return new PersistlyAccountAuthConflictError(message, details, status);
     case "rate_limited":
       return new PersistlyRateLimitedError(message, details, status);
     case "payload_too_large":
