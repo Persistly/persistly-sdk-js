@@ -1026,6 +1026,7 @@ function syncAcceptedResultWithSave(result: AcceptedSyncResponse, save: Save): S
     save: {
       ...save,
       version: result.version,
+      createdAt: save.createdAt === nowForCompat() ? result.updatedAt : save.createdAt,
       updatedAt: result.updatedAt,
     },
   };

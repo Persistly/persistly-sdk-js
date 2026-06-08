@@ -179,6 +179,33 @@ test("syncAccountSlot uses account session header and synthesizes accepted slot 
   });
 });
 
+test("syncAccountSlot uses server updatedAt as createdAt fallback without cached save", async () => {
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    cache: new MemorySaveCache(),
+    fetch: async () =>
+      createJsonResponse(200, {
+        status: "accepted",
+        version: 4,
+        updatedAt: "2026-05-01T00:01:00.000Z",
+        historyRetained: true,
+      }),
+  });
+
+  const result = await client.syncAccountSlot({
+    accountId: "acc_test",
+    accountSessionToken: "pst_session",
+    slotId: "autosave",
+    baseVersion: 3,
+    data: { level: 2 },
+    slotInfo: { characterName: "Ayla" },
+  });
+
+  assert.equal(result.status, PersistlySyncStatus.Accepted);
+  assert.equal(result.save.createdAt, "2026-05-01T00:01:00.000Z");
+  assert.equal(result.save.updatedAt, "2026-05-01T00:01:00.000Z");
+});
+
 test("syncAccountSlot synthesizes conflict save from public slot response", async () => {
   const cache = new MemorySaveCache();
   await cache.set({
