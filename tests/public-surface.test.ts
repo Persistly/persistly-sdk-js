@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 
 test("public facade source uses data terms and marks raw save compatibility fields internal", async () => {
   const source = await readFile("src/game-saves.ts", "utf8");
@@ -37,4 +37,39 @@ test("package root and exported subpaths do not expose raw cache schema modules"
   for (const privateSubpath of ["./cache", "./schema", "./file-cache", "./local-storage-cache"]) {
     assert.equal(packageJson.exports[privateSubpath], undefined);
   }
+});
+
+test("public auth bridge surface is Firebase-only", async () => {
+  const [
+    readme,
+    publicMethods,
+    authRequiredReadme,
+    authRequiredService,
+    authRequiredUsage,
+    examples,
+  ] = await Promise.all([
+    readFile("README.md", "utf8"),
+    readFile("docs/public-methods.md", "utf8"),
+    readFile("templates/auth-required/README.md", "utf8"),
+    readFile("templates/auth-required/persistly-save-service.ts", "utf8"),
+    readFile("templates/auth-required/usage.ts", "utf8"),
+    readdir("examples"),
+  ]);
+  const publicText = [
+    readme,
+    publicMethods,
+    authRequiredReadme,
+    authRequiredService,
+    authRequiredUsage,
+  ].join("\n");
+
+  assert.equal(examples.includes("auth-google.ts"), false);
+  assert.equal(examples.includes("auth-oidc.ts"), false);
+  assert.match(publicText, /signInWithFirebaseToken/);
+  assert.doesNotMatch(publicText, /signInWithGoogleIdToken/);
+  assert.doesNotMatch(publicText, /auth-google/);
+  assert.doesNotMatch(publicText, /auth-oidc/);
+  assert.doesNotMatch(publicText, /\boidc_jwt\b/i);
+  assert.doesNotMatch(publicText, /\bOIDC\b/);
+  assert.doesNotMatch(publicText, /\bGoogle\b/);
 });

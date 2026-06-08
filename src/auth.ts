@@ -1,6 +1,6 @@
 export type PersistlyAccountMode = "anonymousFirst" | "authRequired";
 
-export type PersistlyAuthProvider = "google" | "oidc_jwt";
+export type PersistlyAuthProvider = "firebase";
 
 export interface PersistlyAuthOptions {
   deviceLabel?: string;

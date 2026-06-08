@@ -2,7 +2,6 @@ import {
   PersistlyGameSaveStatus,
   PersistlyGameSaves,
   type JsonObject,
-  type PersistlyAuthProvider,
 } from "@persistlyapp/sdk";
 
 export type PlayerSaveData = JsonObject;
@@ -14,19 +13,18 @@ export async function configurePersistly(runtimeKey: string): Promise<void> {
   });
 }
 
-export async function signInWithGoogle(idToken: string, deviceLabel?: string): Promise<void> {
-  await PersistlyGameSaves.shared.signInWithGoogleIdToken(idToken, {
+export async function signInWithFirebase(token: string, deviceLabel?: string): Promise<void> {
+  await PersistlyGameSaves.shared.signInWithFirebaseToken(token, {
     ...(deviceLabel === undefined ? {} : { deviceLabel }),
   });
 }
 
 export async function signInWithProvider(
-  provider: PersistlyAuthProvider,
   token: string,
   deviceLabel?: string,
 ): Promise<void> {
   await PersistlyGameSaves.shared.signInWithProvider({
-    provider,
+    provider: "firebase",
     token,
     ...(deviceLabel === undefined ? {} : { deviceLabel }),
   });

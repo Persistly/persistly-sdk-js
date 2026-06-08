@@ -5,10 +5,10 @@ Use this template when your game shows sign-in before gameplay and should not cr
 ## Files
 
 - `persistly-save-service.ts` wraps configuration, provider sign-in, local save/load, sync, and sign-out.
-- `usage.ts` shows a Google sign-in flow. Use `signInWithProvider` for OIDC/JWT providers such as Clerk, Auth0, Supabase, Firebase, or a custom backend.
+- `usage.ts` shows a Firebase Auth sign-in flow.
 
 ## Provider Tokens
 
-Send provider tokens only to `signInWithGoogleIdToken` or `signInWithProvider`. Normal save, load, and sync calls use the Persistly account session returned by the SDK.
+Send Firebase ID tokens only to `signInWithFirebaseToken` or `signInWithProvider({ provider: "firebase", ... })`. Normal save, load, and sync calls use the Persistly account session returned by the SDK.
 
 On sign-out, the SDK clears Persistly local account and slot data from this device.

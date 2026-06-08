@@ -139,7 +139,7 @@ paths:
       tags: [Account Auth]
       summary: Exchange provider token for account session
       description: |
-        Verify a configured Google or OIDC/JWT provider token and return a normal Persistly account session.
+        Verify a configured Firebase Auth ID token and return a normal Persistly account session.
         SDK helpers are preferred for most games. Direct HTTP is intended for custom engines,
         custom SDKs, and advanced integrations that intentionally manage accountId and accountSessionToken.
 
@@ -157,18 +157,12 @@ paths:
             schema:
               $ref: '#/components/schemas/AuthSessionRequest'
             examples:
-              google:
-                summary: Google ID token exchange
+              firebase:
+                summary: Firebase ID token exchange
                 value:
-                  provider: google
-                  token: PROVIDER_ID_TOKEN_PLACEHOLDER
+                  provider: firebase
+                  token: FIREBASE_ID_TOKEN_PLACEHOLDER
                   deviceLabel: iPhone
-              oidc:
-                summary: Generic OIDC/JWT token exchange
-                value:
-                  provider: oidc_jwt
-                  token: PROVIDER_JWT_PLACEHOLDER
-                  deviceLabel: Steam Deck
       responses:
         '200':
           description: Account session issued
@@ -183,7 +177,7 @@ paths:
                     accountId: acc_01HXYZ
                     accountSessionToken: pst_01HSESSION
                     isNewAccount: false
-                    linkedProvider: google
+                    linkedProvider: firebase
                     wasProviderNewForAccount: true
         '400':
           description: Invalid request or provider token
@@ -225,7 +219,7 @@ paths:
       summary: List linked auth providers for the current account
       description: |
         Return safe provider metadata for the current Persistly account session.
-        The response excludes raw provider subjects, hashes, tokens, slot data, account data, and internal save ids.
+        The response excludes provider subjects, hashes, tokens, slot data, account data, and non-public identifiers.
       security:
         - RuntimeKey: []
       parameters:
@@ -242,11 +236,11 @@ paths:
                   $ref: '#/components/schemas/LinkedAuthProvider'
               examples:
                 default:
-                  summary: Linked Google provider
+                  summary: Linked Firebase provider
                   value:
-                    - provider: google
+                    - provider: firebase
                       display:
-                        label: Google
+                        label: Firebase
                         emailHint: a***@gmail.com
                       linkedAt: "2026-06-06T12:00:00Z"
                       lastUsedAt: "2026-06-06T12:30:00Z"
@@ -809,7 +803,7 @@ components:
           $ref: '#/components/schemas/CreateAccountInitialSlot'
     AuthProvider:
       type: string
-      enum: [google, oidc_jwt]
+      enum: [firebase]
     AuthSessionRequest:
       type: object
       required: [provider, token]
@@ -819,7 +813,7 @@ components:
           $ref: '#/components/schemas/AuthProvider'
         token:
           type: string
-          description: Raw provider token from Google or a configured OIDC/JWT provider. Never log or persist this value.
+          description: Raw Firebase ID token. Never log or persist this value.
         deviceLabel:
           type: string
           maxLength: 80
@@ -1212,7 +1206,7 @@ components:
     AccountAuthConflictSummary:
       type: object
       required: [linkedProvider, linkedProviderCount, linkedAccount]
-      description: Safe conflict summary. It intentionally excludes slotInfo, data, provider subject, subject hashes, raw tokens, and internal ids.
+      description: Safe conflict summary. It intentionally excludes slotInfo, data, provider subject, subject hashes, raw tokens, and non-public identifiers.
       properties:
         linkedProvider:
           $ref: '#/components/schemas/AuthProvider'
@@ -1305,7 +1299,7 @@ components:
                   code: auth_provider_not_configured
                   message: Auth provider is not configured for this environment.
                   details:
-                    provider: google
+                    provider: firebase
     AccountAuthConflict:
       description: Provider identity is already linked to a different account
       content:
@@ -1321,7 +1315,7 @@ components:
                   message: Auth identity is already linked to another account.
                   details:
                     summary:
-                      linkedProvider: google
+                      linkedProvider: firebase
                       linkedProviderCount: 1
                       linkedAccount:
                         activeSlotCount: 3

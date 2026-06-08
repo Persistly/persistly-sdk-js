@@ -8,10 +8,10 @@ await PersistlyGameSaves.configure({
   accountMode: "authRequired",
 });
 
-// Get this token from your Google Sign-In flow.
-const googleIdToken = "GOOGLE_ID_TOKEN_PLACEHOLDER";
+// Get this token from Firebase Auth in your game client.
+const firebaseIdToken = "FIREBASE_ID_TOKEN_PLACEHOLDER";
 
-await PersistlyGameSaves.shared.signInWithGoogleIdToken(googleIdToken, {
+await PersistlyGameSaves.shared.signInWithFirebaseToken(firebaseIdToken, {
   deviceLabel: "Browser",
 });
 
@@ -24,5 +24,5 @@ await PersistlyGameSaves.shared.saveData({
 const sync = await PersistlyGameSaves.shared.forceSyncData();
 
 if (sync.status === PersistlyGameSaveStatus.Synced) {
-  console.log("Google-authenticated save synced.");
+  console.log("Firebase-authenticated save synced.");
 }

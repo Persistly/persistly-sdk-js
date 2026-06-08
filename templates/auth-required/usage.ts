@@ -2,7 +2,7 @@ import {
   configurePersistly,
   loadGame,
   saveGame,
-  signInWithGoogle,
+  signInWithFirebase,
   signOut,
   syncGame,
   type PlayerSaveData,
@@ -10,8 +10,8 @@ import {
 
 await configurePersistly("ps_test_replace_me");
 
-// Replace with the ID token returned by your Google Sign-In flow.
-await signInWithGoogle("GOOGLE_ID_TOKEN_PLACEHOLDER", "Browser");
+// Replace with the ID token returned by Firebase Auth.
+await signInWithFirebase("FIREBASE_ID_TOKEN_PLACEHOLDER", "Browser");
 
 const existing = await loadGame();
 const state: PlayerSaveData = existing ?? {

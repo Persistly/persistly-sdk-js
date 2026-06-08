@@ -1222,8 +1222,8 @@ function transferCodeRequestBody(payload: {
 }
 
 function assertAuthProvider(provider: PersistlyAuthProvider, operation: string): PersistlyAuthProvider {
-  if (provider !== "google" && provider !== "oidc_jwt") {
-    throw new PersistlyConfigurationError(`${operation} provider must be "google" or "oidc_jwt".`);
+  if (provider !== "firebase") {
+    throw new PersistlyConfigurationError(`${operation} provider must be "firebase".`);
   }
   return provider;
 }
@@ -1244,8 +1244,8 @@ function parseAuthSessionResult(value: unknown): PersistlyAuthSessionResult {
   if (typeof record.accountSessionToken !== "string" || record.accountSessionToken.trim() === "") {
     throw new PersistlyConfigurationError("Auth session response accountSessionToken must be a non-empty string.");
   }
-  if (provider !== "google" && provider !== "oidc_jwt") {
-    throw new PersistlyConfigurationError("Auth session response linkedProvider must be google or oidc_jwt.");
+  if (provider !== "firebase") {
+    throw new PersistlyConfigurationError("Auth session response linkedProvider must be firebase.");
   }
   if (typeof record.isNewAccount !== "boolean") {
     throw new PersistlyConfigurationError("Auth session response isNewAccount must be a boolean.");
@@ -1269,8 +1269,8 @@ function parseLinkedAuthProviders(value: unknown): PersistlyLinkedProvider[] {
   return value.map((entry, index) => {
     const record = parseObject(entry, `Linked auth providers response[${index}]`);
     const provider = record.provider;
-    if (provider !== "google" && provider !== "oidc_jwt") {
-      throw new PersistlyConfigurationError(`Linked auth providers response[${index}].provider must be google or oidc_jwt.`);
+    if (provider !== "firebase") {
+      throw new PersistlyConfigurationError(`Linked auth providers response[${index}].provider must be firebase.`);
     }
     const display = parseObject(record.display, `Linked auth providers response[${index}].display`);
     if (typeof display.label !== "string" || display.label.trim() === "") {

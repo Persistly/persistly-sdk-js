@@ -122,7 +122,7 @@ Use `clearLocalAccount()` for local sign-out only. Use `deleteAccount()` for per
 
 ## Auth Bridge
 
-Use Auth Bridge when your game already signs players in with Google or another OIDC/JWT provider. Persistly verifies the provider token once, then returns a normal Persistly account session. Save, load, and sync calls do not send provider tokens.
+Use Auth Bridge when your game already signs players in with Firebase Auth. Persistly verifies the Firebase ID token once, then returns a normal Persistly account session. Save, load, and sync calls do not send Firebase tokens.
 
 ```ts
 await PersistlyGameSaves.configure({
@@ -130,8 +130,10 @@ await PersistlyGameSaves.configure({
   accountMode: "authRequired",
 });
 
-// Get this token from your Google Sign-In flow.
-await PersistlyGameSaves.shared.signInWithGoogleIdToken(googleIdToken, {
+// Get this ID token from Firebase Auth in your game client.
+const firebaseIdToken = await firebaseUser.getIdToken();
+
+await PersistlyGameSaves.shared.signInWithFirebaseToken(firebaseIdToken, {
   deviceLabel: "Browser",
 });
 
@@ -143,13 +145,13 @@ await PersistlyGameSaves.shared.saveData({
 await PersistlyGameSaves.shared.forceSyncData();
 ```
 
-Generic OIDC/JWT providers use the same shape:
+The lower-level provider helper is available for wrappers that prefer an explicit provider key:
 
 ```ts
 await PersistlyGameSaves.shared.signInWithProvider({
-  provider: "oidc_jwt",
-  token: providerJwt,
-  deviceLabel: "Steam Deck",
+  provider: "firebase",
+  token: firebaseIdToken,
+  deviceLabel: "Browser",
 });
 ```
 
@@ -157,8 +159,8 @@ To attach an additional provider to the current Persistly account:
 
 ```ts
 await PersistlyGameSaves.shared.linkProvider({
-  provider: "google",
-  token: googleIdToken,
+  provider: "firebase",
+  token: firebaseIdToken,
 });
 ```
 

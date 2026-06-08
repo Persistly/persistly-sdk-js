@@ -77,7 +77,7 @@ test("authRequired keeps saves local and refuses cloud sync before sign-in", asy
   assert.equal(synced.status, PersistlyGameSaveStatus.AuthRequired);
 });
 
-test("client exchanges provider token for account session with optional current account headers", async () => {
+test("client exchanges Firebase token for account session with optional current account headers", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const client = new PersistlyClient({
     runtimeKey: "ps_test_runtime",
@@ -87,15 +87,15 @@ test("client exchanges provider token for account session with optional current 
         accountId: "acc_auth",
         accountSessionToken: "pst_auth",
         isNewAccount: false,
-        linkedProvider: "google",
+        linkedProvider: "firebase",
         wasProviderNewForAccount: true,
       });
     },
   });
 
   const result = await client.exchangeAccountAuthSession({
-    provider: "google",
-    token: "google-id-token",
+    provider: "firebase",
+    token: "firebase-id-token",
     deviceLabel: "Laptop",
     accountId: "acc_local",
     accountSessionToken: "pst_local",
@@ -105,13 +105,13 @@ test("client exchanges provider token for account session with optional current 
     accountId: "acc_auth",
     accountSessionToken: "pst_auth",
     isNewAccount: false,
-    linkedProvider: "google",
+    linkedProvider: "firebase",
     wasProviderNewForAccount: true,
   });
   assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/accounts/auth/session`);
   assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
-    provider: "google",
-    token: "google-id-token",
+    provider: "firebase",
+    token: "firebase-id-token",
     deviceLabel: "Laptop",
   });
   const headers = new Headers(requests[0]?.init?.headers);
@@ -119,7 +119,7 @@ test("client exchanges provider token for account session with optional current 
   assert.equal(headers.get("x-persistly-account-session"), "pst_local");
 });
 
-test("signInWithGoogleIdToken stores returned account session and save after sign-in uses it", async () => {
+test("signInWithFirebaseToken stores returned account session and save after sign-in uses it", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const persistly = new PersistlyGameSavesInstance({
     runtimeKey: "ps_test_runtime",
@@ -133,7 +133,7 @@ test("signInWithGoogleIdToken stores returned account session and save after sig
           accountId: "acc_auth",
           accountSessionToken: "pst_auth",
           isNewAccount: true,
-          linkedProvider: "google",
+          linkedProvider: "firebase",
           wasProviderNewForAccount: true,
         });
       }
@@ -172,7 +172,7 @@ test("signInWithGoogleIdToken stores returned account session and save after sig
   });
 
   await persistly.saveData({ level: 2 });
-  const auth = await persistly.signInWithGoogleIdToken("google-id-token", { deviceLabel: "Laptop" });
+  const auth = await persistly.signInWithFirebaseToken("firebase-id-token", { deviceLabel: "Laptop" });
   const session = await persistly.getAccountSession({ includeToken: true });
   const synced = await persistly.forceSyncData({ bypassCooldown: true });
 
@@ -183,7 +183,7 @@ test("signInWithGoogleIdToken stores returned account session and save after sig
   assert.equal(new Headers(slotRequest?.init?.headers).get("x-persistly-account-session"), "pst_auth");
 });
 
-test("linkProvider uses current account session headers", async () => {
+test("linkProvider uses current account session headers for Firebase", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const persistly = new PersistlyGameSavesInstance({
     runtimeKey: "ps_test_runtime",
@@ -196,13 +196,13 @@ test("linkProvider uses current account session headers", async () => {
         accountId: "acc_local",
         accountSessionToken: "pst_rotated",
         isNewAccount: false,
-        linkedProvider: "google",
+        linkedProvider: "firebase",
         wasProviderNewForAccount: true,
       });
     },
   });
 
-  const result = await persistly.linkProvider({ provider: "google", token: "google-id-token" });
+  const result = await persistly.linkProvider({ provider: "firebase", token: "firebase-id-token" });
 
   assert.equal(result.accountSessionToken, "pst_rotated");
   const headers = new Headers(requests[0]?.init?.headers);
@@ -221,9 +221,9 @@ test("listLinkedProviders parses safe provider list", async () => {
       requests.push({ url: String(input), init });
       return jsonResponse(200, [
         {
-          provider: "google",
+          provider: "firebase",
           display: {
-            label: "Google",
+            label: "Firebase",
             emailHint: "pl***@example.com",
           },
           linkedAt: "2026-06-06T12:00:00Z",
@@ -237,9 +237,9 @@ test("listLinkedProviders parses safe provider list", async () => {
 
   assert.deepEqual(providers, [
     {
-      provider: "google",
+      provider: "firebase",
       display: {
-        label: "Google",
+        label: "Firebase",
         emailHint: "pl***@example.com",
       },
       linkedAt: "2026-06-06T12:00:00Z",
@@ -281,7 +281,7 @@ test("account_auth_conflict becomes a typed SDK error", async () => {
         message: "Auth identity is already linked to another account.",
         details: {
           summary: {
-            linkedProvider: "google",
+            linkedProvider: "firebase",
             linkedProviderCount: 1,
             linkedAccount: { activeSlotCount: 2 },
           },
@@ -291,9 +291,27 @@ test("account_auth_conflict becomes a typed SDK error", async () => {
   });
 
   await assert.rejects(
-    () => client.exchangeAccountAuthSession({ provider: "google", token: "google-id-token" }),
+    () => client.exchangeAccountAuthSession({ provider: "firebase", token: "firebase-id-token" }),
     (error) => error instanceof PersistlyAccountAuthConflictError
       && error.code === "account_auth_conflict"
       && error.status === 409,
+  );
+});
+
+test("client rejects non-Firebase auth providers in Phase 1A", async () => {
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async () => {
+      throw new Error("unsupported providers must fail before network");
+    },
+  });
+
+  await assert.rejects(
+    () => client.exchangeAccountAuthSession({ provider: "google", token: "google-id-token" }),
+    /provider must be "firebase"/,
+  );
+  await assert.rejects(
+    () => client.exchangeAccountAuthSession({ provider: "oidc_jwt", token: "provider-jwt" }),
+    /provider must be "firebase"/,
   );
 });

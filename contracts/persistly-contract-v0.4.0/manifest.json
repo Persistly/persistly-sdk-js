@@ -36,8 +36,8 @@
     },
     {
       "path": "openapi/persistly-api.yaml",
-      "sha256": "dc475de4cf501766c56ece79a4c5ce9979c1d8726cfe3e415cbad592d9807dcf",
-      "bytes": 47706
+      "sha256": "4bb21e7fd73847554c943e662a59301e8eee57495364ad98ec530a7895f7e2e1",
+      "bytes": 47444
     }
   ]
 }

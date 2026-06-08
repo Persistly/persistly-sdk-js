@@ -275,7 +275,7 @@ interface PersistlyGameSavesFacade {
     transferCode: string,
     options?: PersistlyAttachWithTransferCodeOptions,
   ): Promise<PersistlyEnsureAccountResult>;
-  signInWithGoogleIdToken(idToken: string, options?: PersistlyAuthOptions): Promise<PersistlyAuthSessionResult>;
+  signInWithFirebaseToken(token: string, options?: PersistlyAuthOptions): Promise<PersistlyAuthSessionResult>;
   signInWithProvider(input: SignInWithProviderInput): Promise<PersistlyAuthSessionResult>;
   linkProvider(input: LinkProviderInput): Promise<PersistlyAuthSessionResult>;
   listLinkedProviders(): Promise<PersistlyLinkedProvider[]>;
@@ -437,7 +437,7 @@ class UnconfiguredPersistlyGameSaves implements PersistlyGameSavesFacade {
     throwNotConfigured();
   }
 
-  async signInWithGoogleIdToken(): Promise<never> {
+  async signInWithFirebaseToken(): Promise<never> {
     throwNotConfigured();
   }
 
@@ -678,13 +678,13 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
     };
   }
 
-  async signInWithGoogleIdToken(
-    idToken: string,
+  async signInWithFirebaseToken(
+    token: string,
     options: PersistlyAuthOptions = {},
   ): Promise<PersistlyAuthSessionResult> {
     return await this.signInWithProvider({
-      provider: "google",
-      token: idToken,
+      provider: "firebase",
+      token,
       ...(options.deviceLabel === undefined ? {} : { deviceLabel: options.deviceLabel }),
     });
   }
