@@ -99,8 +99,8 @@ paths:
                 value:
                   playerRef: player-184
                   externalAccountRef:
-                    provider: auth0
-                    subject: auth0|user_123
+                    provider: studio_account
+                    subject: player-123
                   accountData:
                     diamonds: 1200
                     settings:
@@ -158,7 +158,7 @@ paths:
               $ref: '#/components/schemas/AuthSessionRequest'
             examples:
               firebase:
-                summary: Firebase ID token exchange
+                summary: Firebase Auth ID token exchange
                 value:
                   provider: firebase
                   token: FIREBASE_ID_TOKEN_PLACEHOLDER
@@ -219,7 +219,7 @@ paths:
       summary: List linked auth providers for the current account
       description: |
         Return safe provider metadata for the current Persistly account session.
-        The response excludes provider subjects, hashes, tokens, slot data, account data, and non-public identifiers.
+        The response excludes raw provider subjects, hashes, tokens, slot data, account data, and internal save ids.
       security:
         - RuntimeKey: []
       parameters:
@@ -241,7 +241,7 @@ paths:
                     - provider: firebase
                       display:
                         label: Firebase
-                        emailHint: a***@gmail.com
+                        emailHint: p***@example.com
                       linkedAt: "2026-06-06T12:00:00Z"
                       lastUsedAt: "2026-06-06T12:30:00Z"
         '401':
@@ -813,7 +813,7 @@ components:
           $ref: '#/components/schemas/AuthProvider'
         token:
           type: string
-          description: Raw Firebase ID token. Never log or persist this value.
+          description: Raw Firebase Auth ID token. Never log or persist this value.
         deviceLabel:
           type: string
           maxLength: 80
@@ -1206,7 +1206,7 @@ components:
     AccountAuthConflictSummary:
       type: object
       required: [linkedProvider, linkedProviderCount, linkedAccount]
-      description: Safe conflict summary. It intentionally excludes slotInfo, data, provider subject, subject hashes, raw tokens, and non-public identifiers.
+      description: Safe conflict summary. It intentionally excludes slotInfo, data, provider subject, subject hashes, raw tokens, and internal ids.
       properties:
         linkedProvider:
           $ref: '#/components/schemas/AuthProvider'
