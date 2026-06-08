@@ -135,6 +135,7 @@ test("signInWithFirebaseToken stores returned account session and save after sig
           isNewAccount: true,
           linkedProvider: "firebase",
           wasProviderNewForAccount: true,
+          syncPolicy,
         });
       }
       if (url.endsWith("/api/v1/accounts/acc_auth")) {

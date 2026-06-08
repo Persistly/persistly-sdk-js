@@ -13,12 +13,22 @@ export interface SignInWithProviderInput extends PersistlyAuthOptions {
 
 export type LinkProviderInput = SignInWithProviderInput;
 
+export interface PersistlyAuthSyncPolicy {
+  minRemoteSyncIntervalSeconds: number;
+  forceSyncCooldownSeconds: number;
+  syncOnAppBackground: boolean;
+  syncOnAppForeground: boolean;
+  syncOnReconnect: boolean;
+  maxQueuedLocalSnapshots: number;
+}
+
 export interface PersistlyAuthSessionResult {
   accountId: string;
   accountSessionToken: string;
   isNewAccount: boolean;
   linkedProvider: PersistlyAuthProvider;
   wasProviderNewForAccount: boolean;
+  syncPolicy?: PersistlyAuthSyncPolicy;
 }
 
 export interface PersistlyLinkedProvider {

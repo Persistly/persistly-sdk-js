@@ -109,6 +109,7 @@ test("createAccountSlot sends slotInfo and data without metadata or state", asyn
           version: 1,
           updatedAt: "2026-05-01T00:01:00.000Z",
         },
+        syncPolicy,
       });
     },
   });

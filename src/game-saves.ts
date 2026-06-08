@@ -704,6 +704,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       ...account,
       accountId: result.accountId,
       accountSessionToken: result.accountSessionToken,
+      ...(result.syncPolicy === undefined ? {} : { syncPolicy: result.syncPolicy }),
       dirty: account.dirty,
     });
     return result;
@@ -723,6 +724,7 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
       ...account,
       accountId: result.accountId,
       accountSessionToken: result.accountSessionToken,
+      ...(result.syncPolicy === undefined ? {} : { syncPolicy: result.syncPolicy }),
     });
     return result;
   }

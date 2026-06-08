@@ -1259,6 +1259,7 @@ function parseAuthSessionResult(value: unknown): PersistlyAuthSessionResult {
     isNewAccount: record.isNewAccount,
     linkedProvider: provider,
     wasProviderNewForAccount: record.wasProviderNewForAccount,
+    ...(record.syncPolicy === undefined ? {} : { syncPolicy: parseSyncPolicy(record.syncPolicy) }),
   };
 }
 
