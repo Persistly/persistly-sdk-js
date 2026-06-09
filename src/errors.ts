@@ -14,6 +14,7 @@ export type PersistlyErrorCode =
   | "transfer_code_rate_limited"
   | "transfer_code_disabled"
   | "provider_token_invalid"
+  | "firebase_project_mismatch"
   | "auth_provider_not_configured"
   | "account_auth_conflict"
   | "rate_limited"
@@ -137,6 +138,13 @@ export class PersistlyProviderTokenInvalidError extends PersistlyApiError {
   }
 }
 
+export class PersistlyFirebaseProjectMismatchError extends PersistlyApiError {
+  constructor(message: string, details?: Record<string, unknown>, status = 401) {
+    super(status, "firebase_project_mismatch", message, details);
+    this.name = "PersistlyFirebaseProjectMismatchError";
+  }
+}
+
 export class PersistlyAuthProviderNotConfiguredError extends PersistlyApiError {
   constructor(message: string, details?: Record<string, unknown>, status = 403) {
     super(status, "auth_provider_not_configured", message, details);
@@ -238,6 +246,8 @@ export function createPersistlyApiError(
       return new PersistlyTransferCodeDisabledError(message, details, status);
     case "provider_token_invalid":
       return new PersistlyProviderTokenInvalidError(message, details, status);
+    case "firebase_project_mismatch":
+      return new PersistlyFirebaseProjectMismatchError(message, details, status);
     case "auth_provider_not_configured":
       return new PersistlyAuthProviderNotConfiguredError(message, details, status);
     case "account_auth_conflict":

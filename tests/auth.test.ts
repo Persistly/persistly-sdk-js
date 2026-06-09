@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_PERSISTLY_API_BASE_URL,
   PersistlyAccountAuthConflictError,
+  PersistlyApiError,
   PersistlyClient,
   PersistlyGameSaveStatus,
   PersistlyGameSavesInstance,
@@ -182,6 +183,104 @@ test("signInWithFirebaseToken stores returned account session and save after sig
   assert.equal(synced.status, PersistlyGameSaveStatus.Synced);
   const slotRequest = requests.find((request) => request.url.endsWith("/api/v1/accounts/acc_auth/slots"));
   assert.equal(new Headers(slotRequest?.init?.headers).get("x-persistly-account-session"), "pst_auth");
+});
+
+test("firebase project mismatch preserves safe SDK error code and excludes provider token", async () => {
+  const safeMessage = "This Firebase token belongs to a different Firebase project than the one configured for this environment.";
+  const providerToken = "firebase-secret-provider-token";
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async () => jsonResponse(401, {
+      error: {
+        code: "firebase_project_mismatch",
+        message: safeMessage,
+        retryable: false,
+      },
+    }),
+  });
+
+  await assert.rejects(
+    () => client.exchangeAccountAuthSession({ provider: "firebase", token: providerToken }),
+    (error) => error instanceof PersistlyApiError
+      && error.code === "firebase_project_mismatch"
+      && error.message === safeMessage
+      && !String(error).includes(providerToken)
+      && !error.stack?.includes(providerToken),
+  );
+});
+
+test("provider token is sent only to auth session exchange, never normal save load or sync", async () => {
+  const providerToken = "firebase-secret-provider-token";
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const persistly = new PersistlyGameSavesInstance({
+    runtimeKey: "ps_test_runtime",
+    storage: "memory",
+    accountMode: "authRequired",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      const url = String(input);
+      if (url.endsWith("/api/v1/accounts/auth/session")) {
+        return jsonResponse(200, {
+          accountId: "acc_auth",
+          accountSessionToken: "pst_auth",
+          isNewAccount: true,
+          linkedProvider: "firebase",
+          wasProviderNewForAccount: true,
+          syncPolicy,
+        });
+      }
+      if (url.endsWith("/api/v1/accounts/acc_auth")) {
+        return jsonResponse(200, {
+          accountId: "acc_auth",
+          account: {
+            accountId: "acc_auth",
+            accountData: {},
+            slots: [],
+            version: 1,
+          },
+          syncPolicy,
+        });
+      }
+      if (url.endsWith("/api/v1/accounts/acc_auth/slots")) {
+        const body = JSON.parse(String(init?.body));
+        return jsonResponse(201, {
+          accountId: "acc_auth",
+          account: {
+            accountId: "acc_auth",
+            accountData: {},
+            slots: [{ slotId: body.slotId, slotInfo: body.slotInfo ?? {}, version: 1 }],
+            version: 1,
+          },
+          slot: {
+            slotId: body.slotId,
+            slotInfo: body.slotInfo ?? {},
+            data: body.data,
+            version: 1,
+            updatedAt: "2026-06-06T00:00:00.000Z",
+          },
+          syncPolicy,
+        });
+      }
+      throw new Error(`unexpected request ${url}`);
+    },
+  });
+
+  await persistly.signInWithFirebaseToken(providerToken, { deviceLabel: "Laptop" });
+  await persistly.saveData({ level: 2 });
+  await persistly.saveSlot("manual-1", { level: 3 });
+  await persistly.loadData();
+  await persistly.loadSlot("manual-1");
+  await persistly.forceSyncData({ bypassCooldown: true });
+  await persistly.forceSync("manual-1", { bypassCooldown: true });
+
+  const authRequests = requests.filter((request) => request.url.endsWith("/api/v1/accounts/auth/session"));
+  const normalRequests = requests.filter((request) => !request.url.endsWith("/api/v1/accounts/auth/session"));
+
+  assert.equal(authRequests.length, 1);
+  assert.equal(JSON.stringify(JSON.parse(String(authRequests[0]?.init?.body))).includes(providerToken), true);
+  for (const request of normalRequests) {
+    assert.equal(JSON.stringify(request.init ?? {}).includes(providerToken), false, request.url);
+  }
 });
 
 test("linkProvider uses current account session headers for Firebase", async () => {

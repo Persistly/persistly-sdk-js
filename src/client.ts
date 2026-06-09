@@ -1361,6 +1361,7 @@ function isPersistlyErrorCode(value: unknown): value is PersistlyErrorCode {
     value === "transfer_code_rate_limited" ||
     value === "transfer_code_disabled" ||
     value === "provider_token_invalid" ||
+    value === "firebase_project_mismatch" ||
     value === "auth_provider_not_configured" ||
     value === "account_auth_conflict" ||
     value === "rate_limited" ||
