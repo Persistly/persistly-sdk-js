@@ -190,24 +190,55 @@ paths:
                   summary: Unknown provider key
                   value:
                     error:
-                      code: invalid_request
-                      message: provider must be a supported auth provider.
+                      code: provider_not_supported
+                      message: Auth provider is not supported.
                       details:
                         field: provider
                 invalidToken:
                   summary: Provider token failed verification
                   value:
                     error:
-                      code: provider_token_invalid
-                      message: Provider token is invalid.
+                      code: firebase_token_invalid
+                      message: Firebase ID token is invalid.
+                projectMismatch:
+                  summary: Firebase project mismatch
+                  value:
+                    error:
+                      code: firebase_project_mismatch
+                      message: Firebase token was issued for a different project.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
           $ref: '#/components/responses/PaymentRequired'
-        '403':
-          $ref: '#/components/responses/AuthProviderNotConfigured'
         '409':
-          $ref: '#/components/responses/AccountAuthConflict'
+          description: Auth provider is not ready or provider identity is already linked to another account
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorResponse'
+                  - $ref: '#/components/schemas/AccountAuthConflictResponse'
+              examples:
+                providerNotConfigured:
+                  summary: Provider missing
+                  value:
+                    error:
+                      code: provider_not_configured
+                      message: Auth provider is not configured for this environment.
+                      details:
+                        provider: firebase
+                providerNotEnabled:
+                  summary: Provider disabled
+                  value:
+                    error:
+                      code: provider_not_enabled
+                      message: Auth provider is disabled for this environment.
+                authConflict:
+                  summary: Provider identity belongs to another account
+                  value:
+                    error:
+                      code: account_auth_conflict
+                      message: Auth identity is already linked to another account.
         '429':
           $ref: '#/components/responses/RateLimited'
         '500':
@@ -1178,7 +1209,7 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, slot_archived, account_deleted, account_suspended, slot_deleted, transfer_code_invalid, transfer_code_expired, transfer_code_consumed, transfer_code_rate_limited, transfer_code_disabled, invalid_account_session, provider_token_invalid, auth_provider_not_configured, account_auth_conflict, rate_limited, monthly_quota_exceeded, payload_too_large, server_error]
+              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, slot_archived, account_deleted, account_suspended, slot_deleted, transfer_code_invalid, transfer_code_expired, transfer_code_consumed, transfer_code_rate_limited, transfer_code_disabled, invalid_account_session, provider_not_supported, provider_not_enabled, provider_not_configured, firebase_project_id_required, firebase_project_id_invalid, firebase_token_missing, firebase_token_invalid, firebase_token_expired, firebase_project_mismatch, account_auth_conflict, rate_limited, monthly_quota_exceeded, payload_too_large, server_error]
             message:
               type: string
             details:
@@ -1296,7 +1327,7 @@ components:
               summary: Provider missing or disabled
               value:
                 error:
-                  code: auth_provider_not_configured
+                  code: provider_not_configured
                   message: Auth provider is not configured for this environment.
                   details:
                     provider: firebase
