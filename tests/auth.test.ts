@@ -185,6 +185,81 @@ test("signInWithFirebaseToken stores returned account session and save after sig
   assert.equal(new Headers(slotRequest?.init?.headers).get("x-persistly-account-session"), "pst_auth");
 });
 
+test("signInWithFirebaseToken stores returned sync policy for due sync decisions", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const persistly = new PersistlyGameSavesInstance({
+    runtimeKey: "ps_test_runtime",
+    storage: "memory",
+    accountMode: "authRequired",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      const url = String(input);
+      if (url.endsWith("/api/v1/accounts/auth/session")) {
+        return jsonResponse(200, {
+          accountId: "acc_auth",
+          accountSessionToken: "pst_auth",
+          isNewAccount: true,
+          linkedProvider: "firebase",
+          wasProviderNewForAccount: true,
+          syncPolicy: {
+            ...syncPolicy,
+            minRemoteSyncIntervalSeconds: 3600,
+          },
+        });
+      }
+      if (url.endsWith("/api/v1/accounts/acc_auth")) {
+        return jsonResponse(200, {
+          accountId: "acc_auth",
+          account: {
+            accountId: "acc_auth",
+            accountData: {},
+            slots: [],
+            version: 1,
+          },
+          syncPolicy,
+        });
+      }
+      if (url.endsWith("/api/v1/accounts/acc_auth/slots")) {
+        const body = JSON.parse(String(init?.body));
+        return jsonResponse(201, {
+          accountId: "acc_auth",
+          account: {
+            accountId: "acc_auth",
+            accountData: {},
+            slots: [{ slotId: body.slotId, slotInfo: body.slotInfo ?? {}, version: 1 }],
+            version: 1,
+          },
+          slot: {
+            slotId: body.slotId,
+            slotInfo: body.slotInfo ?? {},
+            data: body.data,
+            version: 1,
+            updatedAt: "2026-06-06T00:00:00.000Z",
+          },
+        });
+      }
+      throw new Error(`unexpected request ${url}`);
+    },
+  });
+
+  await persistly.signInWithFirebaseToken("firebase-id-token", { deviceLabel: "Laptop" });
+  await persistly.saveData({ level: 2 });
+  await persistly.forceSyncData({ bypassCooldown: true });
+  await persistly.saveData({ level: 3 });
+
+  const due = await persistly.syncDueSlots({ includeSkipped: true });
+
+  assert.deepEqual(due, [
+    {
+      status: PersistlyGameSaveStatus.Cooldown,
+      target: "slot",
+      slotId: "autosave",
+      slotKey: "autosave",
+    },
+  ]);
+  assert.equal(requests.filter((request) => request.url.endsWith("/api/v1/accounts/acc_auth/slots")).length, 1);
+});
+
 test("firebase project mismatch preserves safe SDK error code and excludes provider token", async () => {
   const safeMessage = "This Firebase token belongs to a different Firebase project than the one configured for this environment.";
   const providerToken = "firebase-secret-provider-token";
@@ -308,6 +383,38 @@ test("linkProvider uses current account session headers for Firebase", async () 
   const headers = new Headers(requests[0]?.init?.headers);
   assert.equal(headers.get("x-persistly-account-id"), "acc_local");
   assert.equal(headers.get("x-persistly-account-session"), "pst_local");
+});
+
+test("linkProvider conflict preserves current account session", async () => {
+  const persistly = new PersistlyGameSavesInstance({
+    runtimeKey: "ps_test_runtime",
+    storage: "memory",
+    accountId: "acc_local",
+    accountSessionToken: "pst_local",
+    fetch: async () => jsonResponse(409, {
+      error: {
+        code: "account_auth_conflict",
+        message: "Auth identity is already linked to another account.",
+        details: {
+          summary: {
+            linkedProvider: "firebase",
+            linkedProviderCount: 1,
+            linkedAccount: { activeSlotCount: 1 },
+          },
+        },
+      },
+    }),
+  });
+
+  await assert.rejects(
+    () => persistly.linkProvider({ provider: "firebase", token: "firebase-id-token" }),
+    (error) => error instanceof PersistlyAccountAuthConflictError,
+  );
+
+  assert.deepEqual(await persistly.getAccountSession({ includeToken: true }), {
+    accountId: "acc_local",
+    accountSessionToken: "pst_local",
+  });
 });
 
 test("listLinkedProviders parses safe provider list", async () => {
