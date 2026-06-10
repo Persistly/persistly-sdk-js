@@ -39,7 +39,7 @@ test("package root and exported subpaths do not expose raw cache schema modules"
   }
 });
 
-test("public auth bridge surface is Firebase-only", async () => {
+test("public auth bridge surface is Firebase and Supabase only", async () => {
   const [
     readme,
     publicMethods,
@@ -65,7 +65,10 @@ test("public auth bridge surface is Firebase-only", async () => {
 
   assert.equal(examples.includes("auth-google.ts"), false);
   assert.equal(examples.includes("auth-oidc.ts"), false);
+  assert.equal(examples.includes("auth-supabase.ts"), true);
   assert.match(publicText, /signInWithFirebaseToken/);
+  assert.match(publicText, /signInWithSupabaseToken/);
+  assert.match(publicText, /provider: "firebase" \| "supabase"/);
   assert.doesNotMatch(publicText, /signInWithGoogleIdToken/);
   assert.doesNotMatch(publicText, /auth-google/);
   assert.doesNotMatch(publicText, /auth-oidc/);

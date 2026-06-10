@@ -122,7 +122,7 @@ Use `clearLocalAccount()` for local sign-out only. Use `deleteAccount()` for per
 
 ## Auth Bridge
 
-Use Auth Bridge when your game already signs players in with Firebase Auth. Persistly verifies the Firebase ID token once, then returns a normal Persistly account session. Save, load, and sync calls do not send Firebase tokens.
+Use Auth Bridge when your game already signs players in with Firebase Auth or Supabase Auth. Persistly verifies the provider token once, then returns a normal Persistly account session. Save, load, and sync calls do not send provider tokens.
 
 ```ts
 await PersistlyGameSaves.configure({
@@ -145,12 +145,34 @@ await PersistlyGameSaves.shared.saveData({
 await PersistlyGameSaves.shared.forceSyncData();
 ```
 
-The lower-level provider helper is available for wrappers that prefer an explicit provider key:
+For Supabase Auth, configure the Supabase project URL for the Persistly environment in the dashboard, then send the access token returned by your Supabase game login flow. Do not paste Supabase service role keys or JWT secrets into game code or Persistly setup.
+
+```ts
+const { data, error } = await supabase.auth.signInWithPassword({
+  email,
+  password,
+});
+if (error) throw error;
+
+const supabaseAccessToken = data.session.access_token;
+
+await PersistlyGameSaves.shared.signInWithSupabaseToken(supabaseAccessToken, {
+  deviceLabel: "Browser",
+});
+```
+
+The lower-level provider helper is available for wrappers that prefer an explicit provider key. Supported provider keys are `"firebase"` and `"supabase"`:
 
 ```ts
 await PersistlyGameSaves.shared.signInWithProvider({
   provider: "firebase",
   token: firebaseIdToken,
+  deviceLabel: "Browser",
+});
+
+await PersistlyGameSaves.shared.signInWithProvider({
+  provider: "supabase",
+  token: supabaseAccessToken,
   deviceLabel: "Browser",
 });
 ```
@@ -161,6 +183,11 @@ To attach an additional provider to the current Persistly account:
 await PersistlyGameSaves.shared.linkProvider({
   provider: "firebase",
   token: firebaseIdToken,
+});
+
+await PersistlyGameSaves.shared.linkProvider({
+  provider: "supabase",
+  token: supabaseAccessToken,
 });
 ```
 

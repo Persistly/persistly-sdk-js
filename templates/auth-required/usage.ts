@@ -3,6 +3,7 @@ import {
   loadGame,
   saveGame,
   signInWithFirebase,
+  signInWithSupabase,
   signOut,
   syncGame,
   type PlayerSaveData,
@@ -11,7 +12,14 @@ import {
 await configurePersistly("ps_test_replace_me");
 
 // Replace with the ID token returned by Firebase Auth.
-await signInWithFirebase("FIREBASE_ID_TOKEN_PLACEHOLDER", "Browser");
+if (usesFirebaseAuth()) {
+  await signInWithFirebase("FIREBASE_ID_TOKEN_PLACEHOLDER", "Browser");
+}
+
+// Or replace with the access token returned by Supabase Auth in Supabase-backed games.
+if (usesSupabaseAuth()) {
+  await signInWithSupabase("SUPABASE_ACCESS_TOKEN_PLACEHOLDER", "Browser");
+}
 
 const existing = await loadGame();
 const state: PlayerSaveData = existing ?? {
@@ -31,6 +39,14 @@ async function handlePlayerSignOut(): Promise<void> {
 
 function showSignInScreen(): void {
   // Return the player to your login screen.
+}
+
+function usesFirebaseAuth(): boolean {
+  return true;
+}
+
+function usesSupabaseAuth(): boolean {
+  return false;
 }
 
 void handlePlayerSignOut;

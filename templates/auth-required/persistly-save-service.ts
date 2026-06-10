@@ -19,12 +19,19 @@ export async function signInWithFirebase(token: string, deviceLabel?: string): P
   });
 }
 
+export async function signInWithSupabase(token: string, deviceLabel?: string): Promise<void> {
+  await PersistlyGameSaves.shared.signInWithSupabaseToken(token, {
+    ...(deviceLabel === undefined ? {} : { deviceLabel }),
+  });
+}
+
 export async function signInWithProvider(
+  provider: "firebase" | "supabase",
   token: string,
   deviceLabel?: string,
 ): Promise<void> {
   await PersistlyGameSaves.shared.signInWithProvider({
-    provider: "firebase",
+    provider,
     token,
     ...(deviceLabel === undefined ? {} : { deviceLabel }),
   });

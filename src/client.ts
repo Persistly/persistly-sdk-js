@@ -1223,8 +1223,8 @@ function transferCodeRequestBody(payload: {
 }
 
 function assertAuthProvider(provider: PersistlyAuthProvider, operation: string): PersistlyAuthProvider {
-  if (provider !== "firebase") {
-    throw new PersistlyConfigurationError(`${operation} provider must be "firebase".`);
+  if (provider !== "firebase" && provider !== "supabase") {
+    throw new PersistlyConfigurationError(`${operation} provider must be "firebase" or "supabase".`);
   }
   return provider;
 }
@@ -1245,8 +1245,8 @@ function parseAuthSessionResult(value: unknown): PersistlyAuthSessionResult {
   if (typeof record.accountSessionToken !== "string" || record.accountSessionToken.trim() === "") {
     throw new PersistlyConfigurationError("Auth session response accountSessionToken must be a non-empty string.");
   }
-  if (provider !== "firebase") {
-    throw new PersistlyConfigurationError("Auth session response linkedProvider must be firebase.");
+  if (provider !== "firebase" && provider !== "supabase") {
+    throw new PersistlyConfigurationError("Auth session response linkedProvider must be firebase or supabase.");
   }
   if (typeof record.isNewAccount !== "boolean") {
     throw new PersistlyConfigurationError("Auth session response isNewAccount must be a boolean.");
@@ -1271,8 +1271,8 @@ function parseLinkedAuthProviders(value: unknown): PersistlyLinkedProvider[] {
   return value.map((entry, index) => {
     const record = parseObject(entry, `Linked auth providers response[${index}]`);
     const provider = record.provider;
-    if (provider !== "firebase") {
-      throw new PersistlyConfigurationError(`Linked auth providers response[${index}].provider must be firebase.`);
+    if (provider !== "firebase" && provider !== "supabase") {
+      throw new PersistlyConfigurationError(`Linked auth providers response[${index}].provider must be firebase or supabase.`);
     }
     const display = parseObject(record.display, `Linked auth providers response[${index}].display`);
     if (typeof display.label !== "string" || display.label.trim() === "") {
@@ -1360,8 +1360,20 @@ function isPersistlyErrorCode(value: unknown): value is PersistlyErrorCode {
     value === "transfer_code_consumed" ||
     value === "transfer_code_rate_limited" ||
     value === "transfer_code_disabled" ||
+    value === "provider_not_supported" ||
+    value === "provider_not_enabled" ||
+    value === "provider_not_configured" ||
     value === "provider_token_invalid" ||
+    value === "firebase_token_invalid" ||
+    value === "firebase_token_expired" ||
     value === "firebase_project_mismatch" ||
+    value === "supabase_project_url_required" ||
+    value === "supabase_project_url_invalid" ||
+    value === "supabase_token_missing" ||
+    value === "supabase_token_invalid" ||
+    value === "supabase_token_expired" ||
+    value === "supabase_project_mismatch" ||
+    value === "supabase_audience_mismatch" ||
     value === "auth_provider_not_configured" ||
     value === "account_auth_conflict" ||
     value === "rate_limited" ||

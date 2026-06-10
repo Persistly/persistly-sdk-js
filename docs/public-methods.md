@@ -6,7 +6,7 @@
 - `saveData(data, { slotInfo })`, `loadData()`, and `forceSyncData()` are the one-save path. They use the default `autosave` slot.
 - `saveSlot(slotId, data, { slotInfo })`, `loadSlot(slotId)`, `forceSync(slotId)`, `syncDueSlots()`, `listSlots()`, `inspectSlot(slotId)`, and `refreshSlot(slotId)` are the named-slot path.
 - `createAccount()`, `attachAccount({ accountId, accountSessionToken })`, `ensureAccount()`, `getAccountSession({ includeToken })`, `getAccountInfo()`, `clearLocalAccount()`, and `deleteAccount()` manage the account session boundary.
-- `signInWithFirebaseToken(token, { deviceLabel })`, `signInWithProvider({ provider: "firebase", token, deviceLabel })`, `linkProvider({ provider: "firebase", token, deviceLabel })`, `listLinkedProviders()`, and `signOut()` manage Auth Bridge sessions. `accountMode: "authRequired"` keeps local saves available but prevents anonymous cloud account creation before sign-in.
+- `signInWithFirebaseToken(token, { deviceLabel })`, `signInWithSupabaseToken(token, { deviceLabel })`, `signInWithProvider({ provider: "firebase" | "supabase", token, deviceLabel })`, `linkProvider({ provider: "firebase" | "supabase", token, deviceLabel })`, `listLinkedProviders()`, and `signOut()` manage Auth Bridge sessions. `accountMode: "authRequired"` keeps local saves available but prevents anonymous cloud account creation before sign-in.
 - `getAccountData()`, `saveAccountData(accountData)`, `patchAccountData(accountDataPatch)`, `forceSyncAccount()`, and `syncDueAccount()` manage account-wide gameplay data.
 - `archiveSlot(slotId)` retires an active remote slot. `deleteSlot(slotId)` permanently erases a slot. `clearLocalSlot(slotId)` only clears local state.
 

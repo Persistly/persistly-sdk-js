@@ -120,6 +120,48 @@ test("client exchanges Firebase token for account session with optional current 
   assert.equal(headers.get("x-persistly-account-session"), "pst_local");
 });
 
+test("client exchanges Supabase token for account session with optional current account headers", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return jsonResponse(200, {
+        accountId: "acc_auth",
+        accountSessionToken: "pst_auth",
+        isNewAccount: false,
+        linkedProvider: "supabase",
+        wasProviderNewForAccount: true,
+      });
+    },
+  });
+
+  const result = await client.exchangeAccountAuthSession({
+    provider: "supabase",
+    token: "supabase-access-token",
+    deviceLabel: "Laptop",
+    accountId: "acc_local",
+    accountSessionToken: "pst_local",
+  });
+
+  assert.deepEqual(result, {
+    accountId: "acc_auth",
+    accountSessionToken: "pst_auth",
+    isNewAccount: false,
+    linkedProvider: "supabase",
+    wasProviderNewForAccount: true,
+  });
+  assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/accounts/auth/session`);
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    provider: "supabase",
+    token: "supabase-access-token",
+    deviceLabel: "Laptop",
+  });
+  const headers = new Headers(requests[0]?.init?.headers);
+  assert.equal(headers.get("x-persistly-account-id"), "acc_local");
+  assert.equal(headers.get("x-persistly-account-session"), "pst_local");
+});
+
 test("signInWithFirebaseToken stores returned account session and save after sign-in uses it", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const persistly = new PersistlyGameSavesInstance({
@@ -183,6 +225,37 @@ test("signInWithFirebaseToken stores returned account session and save after sig
   assert.equal(synced.status, PersistlyGameSaveStatus.Synced);
   const slotRequest = requests.find((request) => request.url.endsWith("/api/v1/accounts/acc_auth/slots"));
   assert.equal(new Headers(slotRequest?.init?.headers).get("x-persistly-account-session"), "pst_auth");
+});
+
+test("signInWithSupabaseToken stores returned account session", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const persistly = new PersistlyGameSavesInstance({
+    runtimeKey: "ps_test_runtime",
+    storage: "memory",
+    accountMode: "authRequired",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return jsonResponse(200, {
+        accountId: "acc_auth",
+        accountSessionToken: "pst_auth",
+        isNewAccount: true,
+        linkedProvider: "supabase",
+        wasProviderNewForAccount: true,
+        syncPolicy,
+      });
+    },
+  });
+
+  const auth = await persistly.signInWithSupabaseToken("supabase-access-token", { deviceLabel: "Laptop" });
+  const session = await persistly.getAccountSession({ includeToken: true });
+
+  assert.equal(auth.linkedProvider, "supabase");
+  assert.deepEqual(session, { accountId: "acc_auth", accountSessionToken: "pst_auth" });
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    provider: "supabase",
+    token: "supabase-access-token",
+    deviceLabel: "Laptop",
+  });
 });
 
 test("signInWithFirebaseToken stores returned sync policy for due sync decisions", async () => {
@@ -285,7 +358,7 @@ test("firebase project mismatch preserves safe SDK error code and excludes provi
 });
 
 test("provider token is sent only to auth session exchange, never normal save load or sync", async () => {
-  const providerToken = "firebase-secret-provider-token";
+  const providerToken = "supabase-secret-provider-token";
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const persistly = new PersistlyGameSavesInstance({
     runtimeKey: "ps_test_runtime",
@@ -299,7 +372,7 @@ test("provider token is sent only to auth session exchange, never normal save lo
           accountId: "acc_auth",
           accountSessionToken: "pst_auth",
           isNewAccount: true,
-          linkedProvider: "firebase",
+          linkedProvider: "supabase",
           wasProviderNewForAccount: true,
           syncPolicy,
         });
@@ -340,7 +413,7 @@ test("provider token is sent only to auth session exchange, never normal save lo
     },
   });
 
-  await persistly.signInWithFirebaseToken(providerToken, { deviceLabel: "Laptop" });
+  await persistly.signInWithSupabaseToken(providerToken, { deviceLabel: "Laptop" });
   await persistly.saveData({ level: 2 });
   await persistly.saveSlot("manual-1", { level: 3 });
   await persistly.loadData();
@@ -358,7 +431,7 @@ test("provider token is sent only to auth session exchange, never normal save lo
   }
 });
 
-test("linkProvider uses current account session headers for Firebase", async () => {
+test("linkProvider uses current account session headers for Supabase", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const persistly = new PersistlyGameSavesInstance({
     runtimeKey: "ps_test_runtime",
@@ -371,15 +444,16 @@ test("linkProvider uses current account session headers for Firebase", async () 
         accountId: "acc_local",
         accountSessionToken: "pst_rotated",
         isNewAccount: false,
-        linkedProvider: "firebase",
+        linkedProvider: "supabase",
         wasProviderNewForAccount: true,
       });
     },
   });
 
-  const result = await persistly.linkProvider({ provider: "firebase", token: "firebase-id-token" });
+  const result = await persistly.linkProvider({ provider: "supabase", token: "supabase-access-token" });
 
   assert.equal(result.accountSessionToken, "pst_rotated");
+  assert.equal(result.linkedProvider, "supabase");
   const headers = new Headers(requests[0]?.init?.headers);
   assert.equal(headers.get("x-persistly-account-id"), "acc_local");
   assert.equal(headers.get("x-persistly-account-session"), "pst_local");
@@ -436,6 +510,14 @@ test("listLinkedProviders parses safe provider list", async () => {
           linkedAt: "2026-06-06T12:00:00Z",
           lastUsedAt: "2026-06-06T12:30:00Z",
         },
+        {
+          provider: "supabase",
+          display: {
+            label: "Supabase",
+            emailHint: "pl***@example.com",
+          },
+          linkedAt: "2026-06-07T12:00:00Z",
+        },
       ]);
     },
   });
@@ -451,6 +533,14 @@ test("listLinkedProviders parses safe provider list", async () => {
       },
       linkedAt: "2026-06-06T12:00:00Z",
       lastUsedAt: "2026-06-06T12:30:00Z",
+    },
+    {
+      provider: "supabase",
+      display: {
+        label: "Supabase",
+        emailHint: "pl***@example.com",
+      },
+      linkedAt: "2026-06-07T12:00:00Z",
     },
   ]);
   assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/accounts/auth/providers`);
@@ -505,7 +595,7 @@ test("account_auth_conflict becomes a typed SDK error", async () => {
   );
 });
 
-test("client rejects non-Firebase auth providers in Phase 1A", async () => {
+test("client rejects unsupported auth providers before network", async () => {
   const client = new PersistlyClient({
     runtimeKey: "ps_test_runtime",
     fetch: async () => {
@@ -515,10 +605,34 @@ test("client rejects non-Firebase auth providers in Phase 1A", async () => {
 
   await assert.rejects(
     () => client.exchangeAccountAuthSession({ provider: "google", token: "google-id-token" }),
-    /provider must be "firebase"/,
+    /provider must be "firebase" or "supabase"/,
   );
   await assert.rejects(
     () => client.exchangeAccountAuthSession({ provider: "oidc_jwt", token: "provider-jwt" }),
-    /provider must be "firebase"/,
+    /provider must be "firebase" or "supabase"/,
+  );
+});
+
+test("supabase token errors preserve safe SDK error code and exclude provider token", async () => {
+  const safeMessage = "Supabase access token is invalid.";
+  const providerToken = "supabase-secret-provider-token";
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async () => jsonResponse(401, {
+      error: {
+        code: "supabase_token_invalid",
+        message: safeMessage,
+        retryable: false,
+      },
+    }),
+  });
+
+  await assert.rejects(
+    () => client.exchangeAccountAuthSession({ provider: "supabase", token: providerToken }),
+    (error) => error instanceof PersistlyApiError
+      && error.code === "supabase_token_invalid"
+      && error.message === safeMessage
+      && !String(error).includes(providerToken)
+      && !error.stack?.includes(providerToken),
   );
 });

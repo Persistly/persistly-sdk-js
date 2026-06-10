@@ -13,8 +13,20 @@ export type PersistlyErrorCode =
   | "transfer_code_consumed"
   | "transfer_code_rate_limited"
   | "transfer_code_disabled"
+  | "provider_not_supported"
+  | "provider_not_enabled"
+  | "provider_not_configured"
   | "provider_token_invalid"
+  | "firebase_token_invalid"
+  | "firebase_token_expired"
   | "firebase_project_mismatch"
+  | "supabase_project_url_required"
+  | "supabase_project_url_invalid"
+  | "supabase_token_missing"
+  | "supabase_token_invalid"
+  | "supabase_token_expired"
+  | "supabase_project_mismatch"
+  | "supabase_audience_mismatch"
   | "auth_provider_not_configured"
   | "account_auth_conflict"
   | "rate_limited"
@@ -132,22 +144,89 @@ export class PersistlyTransferCodeDisabledError extends PersistlyApiError {
 }
 
 export class PersistlyProviderTokenInvalidError extends PersistlyApiError {
-  constructor(message: string, details?: Record<string, unknown>, status = 400) {
-    super(status, "provider_token_invalid", message, details);
+  constructor(message: string, details?: Record<string, unknown>, status?: number);
+  constructor(
+    code: Extract<
+      PersistlyErrorCode,
+      | "provider_token_invalid"
+      | "firebase_token_invalid"
+      | "firebase_token_expired"
+      | "supabase_token_missing"
+      | "supabase_token_invalid"
+      | "supabase_token_expired"
+    >,
+    message: string,
+    details?: Record<string, unknown>,
+    status?: number,
+  );
+  constructor(
+    codeOrMessage: string,
+    messageOrDetails?: string | Record<string, unknown>,
+    detailsOrStatus?: Record<string, unknown> | number,
+    maybeStatus = 400,
+  ) {
+    const hasExplicitCode = typeof messageOrDetails === "string";
+    const code = hasExplicitCode ? codeOrMessage as PersistlyErrorCode : "provider_token_invalid";
+    const message = hasExplicitCode ? messageOrDetails : codeOrMessage;
+    const details = hasExplicitCode ? detailsOrStatus as Record<string, unknown> | undefined : messageOrDetails;
+    const status = hasExplicitCode ? maybeStatus : typeof detailsOrStatus === "number" ? detailsOrStatus : 400;
+    super(status, code, message, details);
     this.name = "PersistlyProviderTokenInvalidError";
   }
 }
 
 export class PersistlyFirebaseProjectMismatchError extends PersistlyApiError {
-  constructor(message: string, details?: Record<string, unknown>, status = 401) {
-    super(status, "firebase_project_mismatch", message, details);
+  constructor(message: string, details?: Record<string, unknown>, status?: number);
+  constructor(
+    code: Extract<PersistlyErrorCode, "firebase_project_mismatch" | "supabase_project_mismatch" | "supabase_audience_mismatch">,
+    message: string,
+    details?: Record<string, unknown>,
+    status?: number,
+  );
+  constructor(
+    codeOrMessage: string,
+    messageOrDetails?: string | Record<string, unknown>,
+    detailsOrStatus?: Record<string, unknown> | number,
+    maybeStatus = 401,
+  ) {
+    const hasExplicitCode = typeof messageOrDetails === "string";
+    const code = hasExplicitCode ? codeOrMessage as PersistlyErrorCode : "firebase_project_mismatch";
+    const message = hasExplicitCode ? messageOrDetails : codeOrMessage;
+    const details = hasExplicitCode ? detailsOrStatus as Record<string, unknown> | undefined : messageOrDetails;
+    const status = hasExplicitCode ? maybeStatus : typeof detailsOrStatus === "number" ? detailsOrStatus : 401;
+    super(status, code, message, details);
     this.name = "PersistlyFirebaseProjectMismatchError";
   }
 }
 
 export class PersistlyAuthProviderNotConfiguredError extends PersistlyApiError {
-  constructor(message: string, details?: Record<string, unknown>, status = 403) {
-    super(status, "auth_provider_not_configured", message, details);
+  constructor(message: string, details?: Record<string, unknown>, status?: number);
+  constructor(
+    code: Extract<
+      PersistlyErrorCode,
+      | "auth_provider_not_configured"
+      | "provider_not_configured"
+      | "provider_not_enabled"
+      | "provider_not_supported"
+      | "supabase_project_url_required"
+      | "supabase_project_url_invalid"
+    >,
+    message: string,
+    details?: Record<string, unknown>,
+    status?: number,
+  );
+  constructor(
+    codeOrMessage: string,
+    messageOrDetails?: string | Record<string, unknown>,
+    detailsOrStatus?: Record<string, unknown> | number,
+    maybeStatus = 403,
+  ) {
+    const hasExplicitCode = typeof messageOrDetails === "string";
+    const code = hasExplicitCode ? codeOrMessage as PersistlyErrorCode : "auth_provider_not_configured";
+    const message = hasExplicitCode ? messageOrDetails : codeOrMessage;
+    const details = hasExplicitCode ? detailsOrStatus as Record<string, unknown> | undefined : messageOrDetails;
+    const status = hasExplicitCode ? maybeStatus : typeof detailsOrStatus === "number" ? detailsOrStatus : 403;
+    super(status, code, message, details);
     this.name = "PersistlyAuthProviderNotConfiguredError";
   }
 }
@@ -245,11 +324,23 @@ export function createPersistlyApiError(
     case "transfer_code_disabled":
       return new PersistlyTransferCodeDisabledError(message, details, status);
     case "provider_token_invalid":
-      return new PersistlyProviderTokenInvalidError(message, details, status);
+    case "firebase_token_invalid":
+    case "firebase_token_expired":
+    case "supabase_token_missing":
+    case "supabase_token_invalid":
+    case "supabase_token_expired":
+      return new PersistlyProviderTokenInvalidError(code, message, details, status);
     case "firebase_project_mismatch":
-      return new PersistlyFirebaseProjectMismatchError(message, details, status);
+    case "supabase_project_mismatch":
+    case "supabase_audience_mismatch":
+      return new PersistlyFirebaseProjectMismatchError(code, message, details, status);
     case "auth_provider_not_configured":
-      return new PersistlyAuthProviderNotConfiguredError(message, details, status);
+    case "provider_not_configured":
+    case "provider_not_enabled":
+    case "provider_not_supported":
+    case "supabase_project_url_required":
+    case "supabase_project_url_invalid":
+      return new PersistlyAuthProviderNotConfiguredError(code, message, details, status);
     case "account_auth_conflict":
       return new PersistlyAccountAuthConflictError(message, details, status);
     case "rate_limited":

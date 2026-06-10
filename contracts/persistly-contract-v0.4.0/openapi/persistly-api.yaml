@@ -139,7 +139,7 @@ paths:
       tags: [Account Auth]
       summary: Exchange provider token for account session
       description: |
-        Verify a configured Firebase Auth ID token and return a normal Persistly account session.
+        Verify a configured Firebase Auth ID token or Supabase access token and return a normal Persistly account session.
         SDK helpers are preferred for most games. Direct HTTP is intended for custom engines,
         custom SDKs, and advanced integrations that intentionally manage accountId and accountSessionToken.
 
@@ -163,6 +163,12 @@ paths:
                   provider: firebase
                   token: FIREBASE_ID_TOKEN_PLACEHOLDER
                   deviceLabel: iPhone
+              supabase:
+                summary: Supabase access token exchange
+                value:
+                  provider: supabase
+                  token: SUPABASE_ACCESS_TOKEN_PLACEHOLDER
+                  deviceLabel: Steam Deck
       responses:
         '200':
           description: Account session issued
@@ -179,6 +185,9 @@ paths:
                     isNewAccount: false
                     linkedProvider: firebase
                     wasProviderNewForAccount: true
+                    syncPolicy:
+                      minRemoteSyncIntervalSeconds: 60
+                      forceSyncCooldownSeconds: 10
         '400':
           description: Invalid request or provider token
           content:
@@ -201,11 +210,11 @@ paths:
                       code: firebase_token_invalid
                       message: Firebase ID token is invalid.
                 projectMismatch:
-                  summary: Firebase project mismatch
+                  summary: Provider project mismatch
                   value:
                     error:
-                      code: firebase_project_mismatch
-                      message: Firebase token was issued for a different project.
+                      code: supabase_project_mismatch
+                      message: Supabase token was issued for a different project.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '402':
@@ -834,7 +843,7 @@ components:
           $ref: '#/components/schemas/CreateAccountInitialSlot'
     AuthProvider:
       type: string
-      enum: [firebase]
+      enum: [firebase, supabase]
     AuthSessionRequest:
       type: object
       required: [provider, token]
@@ -844,7 +853,7 @@ components:
           $ref: '#/components/schemas/AuthProvider'
         token:
           type: string
-          description: Raw Firebase Auth ID token. Never log or persist this value.
+          description: Raw provider token, such as a Firebase ID token or Supabase access token. Never log or persist this value.
         deviceLabel:
           type: string
           maxLength: 80
@@ -1209,7 +1218,7 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, slot_archived, account_deleted, account_suspended, slot_deleted, transfer_code_invalid, transfer_code_expired, transfer_code_consumed, transfer_code_rate_limited, transfer_code_disabled, invalid_account_session, provider_not_supported, provider_not_enabled, provider_not_configured, firebase_project_id_required, firebase_project_id_invalid, firebase_token_missing, firebase_token_invalid, firebase_token_expired, firebase_project_mismatch, account_auth_conflict, rate_limited, monthly_quota_exceeded, payload_too_large, server_error]
+              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, slot_archived, account_deleted, account_suspended, slot_deleted, transfer_code_invalid, transfer_code_expired, transfer_code_consumed, transfer_code_rate_limited, transfer_code_disabled, invalid_account_session, provider_not_supported, provider_not_enabled, provider_not_configured, provider_config_invalid, firebase_project_id_required, firebase_project_id_invalid, firebase_token_missing, firebase_token_invalid, firebase_token_expired, firebase_project_mismatch, supabase_project_url_required, supabase_project_url_invalid, supabase_token_missing, supabase_token_invalid, supabase_token_expired, supabase_project_mismatch, supabase_audience_mismatch, account_auth_conflict, rate_limited, monthly_quota_exceeded, payload_too_large, server_error]
             message:
               type: string
             details:
