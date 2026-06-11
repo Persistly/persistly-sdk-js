@@ -1,6 +1,6 @@
 export type PersistlyAccountMode = "anonymousFirst" | "authRequired";
 
-export type PersistlyAuthProvider = "firebase" | "supabase";
+export type PersistlyAuthProvider = "firebase" | "supabase" | "auth0";
 
 export interface PersistlyAuthOptions {
   deviceLabel?: string;

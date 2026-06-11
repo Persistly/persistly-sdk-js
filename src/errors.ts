@@ -27,6 +27,13 @@ export type PersistlyErrorCode =
   | "supabase_token_expired"
   | "supabase_project_mismatch"
   | "supabase_audience_mismatch"
+  | "auth0_domain_required"
+  | "auth0_domain_invalid"
+  | "auth0_token_missing"
+  | "auth0_token_invalid"
+  | "auth0_token_expired"
+  | "auth0_issuer_mismatch"
+  | "auth0_audience_mismatch"
   | "auth_provider_not_configured"
   | "account_auth_conflict"
   | "rate_limited"
@@ -154,6 +161,9 @@ export class PersistlyProviderTokenInvalidError extends PersistlyApiError {
       | "supabase_token_missing"
       | "supabase_token_invalid"
       | "supabase_token_expired"
+      | "auth0_token_missing"
+      | "auth0_token_invalid"
+      | "auth0_token_expired"
     >,
     message: string,
     details?: Record<string, unknown>,
@@ -178,7 +188,7 @@ export class PersistlyProviderTokenInvalidError extends PersistlyApiError {
 export class PersistlyFirebaseProjectMismatchError extends PersistlyApiError {
   constructor(message: string, details?: Record<string, unknown>, status?: number);
   constructor(
-    code: Extract<PersistlyErrorCode, "firebase_project_mismatch" | "supabase_project_mismatch" | "supabase_audience_mismatch">,
+    code: Extract<PersistlyErrorCode, "firebase_project_mismatch" | "supabase_project_mismatch" | "supabase_audience_mismatch" | "auth0_issuer_mismatch" | "auth0_audience_mismatch">,
     message: string,
     details?: Record<string, unknown>,
     status?: number,
@@ -210,6 +220,8 @@ export class PersistlyAuthProviderNotConfiguredError extends PersistlyApiError {
       | "provider_not_supported"
       | "supabase_project_url_required"
       | "supabase_project_url_invalid"
+      | "auth0_domain_required"
+      | "auth0_domain_invalid"
     >,
     message: string,
     details?: Record<string, unknown>,
@@ -329,10 +341,15 @@ export function createPersistlyApiError(
     case "supabase_token_missing":
     case "supabase_token_invalid":
     case "supabase_token_expired":
+    case "auth0_token_missing":
+    case "auth0_token_invalid":
+    case "auth0_token_expired":
       return new PersistlyProviderTokenInvalidError(code, message, details, status);
     case "firebase_project_mismatch":
     case "supabase_project_mismatch":
     case "supabase_audience_mismatch":
+    case "auth0_issuer_mismatch":
+    case "auth0_audience_mismatch":
       return new PersistlyFirebaseProjectMismatchError(code, message, details, status);
     case "auth_provider_not_configured":
     case "provider_not_configured":
@@ -340,6 +357,8 @@ export function createPersistlyApiError(
     case "provider_not_supported":
     case "supabase_project_url_required":
     case "supabase_project_url_invalid":
+    case "auth0_domain_required":
+    case "auth0_domain_invalid":
       return new PersistlyAuthProviderNotConfiguredError(code, message, details, status);
     case "account_auth_conflict":
       return new PersistlyAccountAuthConflictError(message, details, status);

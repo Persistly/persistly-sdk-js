@@ -258,6 +258,38 @@ test("signInWithSupabaseToken stores returned account session", async () => {
   });
 });
 
+test("signInWithAuth0Token stores returned account session", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const persistly = new PersistlyGameSavesInstance({
+    runtimeKey: "ps_test_runtime",
+    storage: "memory",
+    accountMode: "authRequired",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return jsonResponse(200, {
+        accountId: "acc_auth",
+        accountSessionToken: "pst_auth",
+        isNewAccount: true,
+        linkedProvider: "auth0",
+        wasProviderNewForAccount: true,
+        syncPolicy,
+      });
+    },
+  });
+
+  const auth = await persistly.signInWithAuth0Token("auth0-token", { deviceLabel: "Laptop" });
+  const session = await persistly.getAccountSession({ includeToken: true });
+
+  assert.equal(auth.linkedProvider, "auth0");
+  assert.deepEqual(session, { accountId: "acc_auth", accountSessionToken: "pst_auth" });
+  assert.deepEqual(JSON.parse(String(requests[0]?.init?.body)), {
+    provider: "auth0",
+    token: "auth0-token",
+    deviceLabel: "Laptop",
+  });
+});
+
+
 test("signInWithFirebaseToken stores returned sync policy for due sync decisions", async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const persistly = new PersistlyGameSavesInstance({
@@ -518,6 +550,14 @@ test("listLinkedProviders parses safe provider list", async () => {
           },
           linkedAt: "2026-06-07T12:00:00Z",
         },
+        {
+          provider: "auth0",
+          display: {
+            label: "Auth0",
+            emailHint: "pl***@example.com",
+          },
+          linkedAt: "2026-06-08T12:00:00Z",
+        },
       ]);
     },
   });
@@ -541,6 +581,14 @@ test("listLinkedProviders parses safe provider list", async () => {
         emailHint: "pl***@example.com",
       },
       linkedAt: "2026-06-07T12:00:00Z",
+    },
+    {
+      provider: "auth0",
+      display: {
+        label: "Auth0",
+        emailHint: "pl***@example.com",
+      },
+      linkedAt: "2026-06-08T12:00:00Z",
     },
   ]);
   assert.equal(requests[0]?.url, `${DEFAULT_PERSISTLY_API_BASE_URL}/api/v1/accounts/auth/providers`);
@@ -605,11 +653,11 @@ test("client rejects unsupported auth providers before network", async () => {
 
   await assert.rejects(
     () => client.exchangeAccountAuthSession({ provider: "google", token: "google-id-token" }),
-    /provider must be "firebase" or "supabase"/,
+    /provider must be "firebase", "supabase", or "auth0"/,
   );
   await assert.rejects(
     () => client.exchangeAccountAuthSession({ provider: "oidc_jwt", token: "provider-jwt" }),
-    /provider must be "firebase" or "supabase"/,
+    /provider must be "firebase", "supabase", or "auth0"/,
   );
 });
 
@@ -631,6 +679,30 @@ test("supabase token errors preserve safe SDK error code and exclude provider to
     () => client.exchangeAccountAuthSession({ provider: "supabase", token: providerToken }),
     (error) => error instanceof PersistlyApiError
       && error.code === "supabase_token_invalid"
+      && error.message === safeMessage
+      && !String(error).includes(providerToken)
+      && !error.stack?.includes(providerToken),
+  );
+});
+
+test("auth0 token errors preserve safe SDK error code and exclude provider token", async () => {
+  const safeMessage = "Auth0 token is invalid.";
+  const providerToken = "auth0-secret-provider-token";
+  const client = new PersistlyClient({
+    runtimeKey: "ps_test_runtime",
+    fetch: async () => jsonResponse(401, {
+      error: {
+        code: "auth0_token_invalid",
+        message: safeMessage,
+        retryable: false,
+      },
+    }),
+  });
+
+  await assert.rejects(
+    () => client.exchangeAccountAuthSession({ provider: "auth0", token: providerToken }),
+    (error) => error instanceof PersistlyApiError
+      && error.code === "auth0_token_invalid"
       && error.message === safeMessage
       && !String(error).includes(providerToken)
       && !error.stack?.includes(providerToken),

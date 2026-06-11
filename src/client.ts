@@ -1223,8 +1223,8 @@ function transferCodeRequestBody(payload: {
 }
 
 function assertAuthProvider(provider: PersistlyAuthProvider, operation: string): PersistlyAuthProvider {
-  if (provider !== "firebase" && provider !== "supabase") {
-    throw new PersistlyConfigurationError(`${operation} provider must be "firebase" or "supabase".`);
+  if (provider !== "firebase" && provider !== "supabase" && provider !== "auth0") {
+    throw new PersistlyConfigurationError(`${operation} provider must be "firebase", "supabase", or "auth0".`);
   }
   return provider;
 }
@@ -1245,8 +1245,8 @@ function parseAuthSessionResult(value: unknown): PersistlyAuthSessionResult {
   if (typeof record.accountSessionToken !== "string" || record.accountSessionToken.trim() === "") {
     throw new PersistlyConfigurationError("Auth session response accountSessionToken must be a non-empty string.");
   }
-  if (provider !== "firebase" && provider !== "supabase") {
-    throw new PersistlyConfigurationError("Auth session response linkedProvider must be firebase or supabase.");
+  if (provider !== "firebase" && provider !== "supabase" && provider !== "auth0") {
+    throw new PersistlyConfigurationError("Auth session response linkedProvider must be firebase, supabase, or auth0.");
   }
   if (typeof record.isNewAccount !== "boolean") {
     throw new PersistlyConfigurationError("Auth session response isNewAccount must be a boolean.");
@@ -1271,8 +1271,8 @@ function parseLinkedAuthProviders(value: unknown): PersistlyLinkedProvider[] {
   return value.map((entry, index) => {
     const record = parseObject(entry, `Linked auth providers response[${index}]`);
     const provider = record.provider;
-    if (provider !== "firebase" && provider !== "supabase") {
-      throw new PersistlyConfigurationError(`Linked auth providers response[${index}].provider must be firebase or supabase.`);
+    if (provider !== "firebase" && provider !== "supabase" && provider !== "auth0") {
+      throw new PersistlyConfigurationError(`Linked auth providers response[${index}].provider must be firebase, supabase, or auth0.`);
     }
     const display = parseObject(record.display, `Linked auth providers response[${index}].display`);
     if (typeof display.label !== "string" || display.label.trim() === "") {
@@ -1374,6 +1374,13 @@ function isPersistlyErrorCode(value: unknown): value is PersistlyErrorCode {
     value === "supabase_token_expired" ||
     value === "supabase_project_mismatch" ||
     value === "supabase_audience_mismatch" ||
+    value === "auth0_domain_required" ||
+    value === "auth0_domain_invalid" ||
+    value === "auth0_token_missing" ||
+    value === "auth0_token_invalid" ||
+    value === "auth0_token_expired" ||
+    value === "auth0_issuer_mismatch" ||
+    value === "auth0_audience_mismatch" ||
     value === "auth_provider_not_configured" ||
     value === "account_auth_conflict" ||
     value === "rate_limited" ||

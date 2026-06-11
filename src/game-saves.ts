@@ -277,6 +277,7 @@ interface PersistlyGameSavesFacade {
   ): Promise<PersistlyEnsureAccountResult>;
   signInWithFirebaseToken(token: string, options?: PersistlyAuthOptions): Promise<PersistlyAuthSessionResult>;
   signInWithSupabaseToken(token: string, options?: PersistlyAuthOptions): Promise<PersistlyAuthSessionResult>;
+  signInWithAuth0Token(token: string, options?: PersistlyAuthOptions): Promise<PersistlyAuthSessionResult>;
   signInWithProvider(input: SignInWithProviderInput): Promise<PersistlyAuthSessionResult>;
   linkProvider(input: LinkProviderInput): Promise<PersistlyAuthSessionResult>;
   listLinkedProviders(): Promise<PersistlyLinkedProvider[]>;
@@ -443,6 +444,10 @@ class UnconfiguredPersistlyGameSaves implements PersistlyGameSavesFacade {
   }
 
   async signInWithSupabaseToken(): Promise<never> {
+    throwNotConfigured();
+  }
+
+  async signInWithAuth0Token(): Promise<never> {
     throwNotConfigured();
   }
 
@@ -700,6 +705,17 @@ export class PersistlyGameSavesInstance implements PersistlyGameSavesFacade {
   ): Promise<PersistlyAuthSessionResult> {
     return await this.signInWithProvider({
       provider: "supabase",
+      token,
+      ...(options.deviceLabel === undefined ? {} : { deviceLabel: options.deviceLabel }),
+    });
+  }
+
+  async signInWithAuth0Token(
+    token: string,
+    options: PersistlyAuthOptions = {},
+  ): Promise<PersistlyAuthSessionResult> {
+    return await this.signInWithProvider({
+      provider: "auth0",
       token,
       ...(options.deviceLabel === undefined ? {} : { deviceLabel: options.deviceLabel }),
     });

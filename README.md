@@ -122,7 +122,7 @@ Use `clearLocalAccount()` for local sign-out only. Use `deleteAccount()` for per
 
 ## Auth Bridge
 
-Use Auth Bridge when your game already signs players in with Firebase Auth or Supabase Auth. Persistly verifies the provider token once, then returns a normal Persistly account session. Save, load, and sync calls do not send provider tokens.
+Use Auth Bridge when your game already signs players in with Firebase Auth, Supabase Auth, or Auth0. Persistly verifies the provider token once, then returns a normal Persistly account session. Save, load, and sync calls do not send provider tokens.
 
 ```ts
 await PersistlyGameSaves.configure({
@@ -161,7 +161,17 @@ await PersistlyGameSaves.shared.signInWithSupabaseToken(supabaseAccessToken, {
 });
 ```
 
-The lower-level provider helper is available for wrappers that prefer an explicit provider key. Supported provider keys are `"firebase"` and `"supabase"`:
+For Auth0, configure the Auth0 tenant domain for the Persistly environment in the dashboard, then send an Auth0 ID token or a configured-audience access token from your game login flow.
+
+```ts
+const auth0Token = await auth0Client.getTokenSilently();
+
+await PersistlyGameSaves.shared.signInWithAuth0Token(auth0Token, {
+  deviceLabel: "Browser",
+});
+```
+
+The lower-level provider helper is available for wrappers that prefer an explicit provider key. Supported provider keys are `"firebase"`, `"supabase"`, and `"auth0"`:
 
 ```ts
 await PersistlyGameSaves.shared.signInWithProvider({
@@ -173,6 +183,12 @@ await PersistlyGameSaves.shared.signInWithProvider({
 await PersistlyGameSaves.shared.signInWithProvider({
   provider: "supabase",
   token: supabaseAccessToken,
+  deviceLabel: "Browser",
+});
+
+await PersistlyGameSaves.shared.signInWithProvider({
+  provider: "auth0",
+  token: auth0Token,
   deviceLabel: "Browser",
 });
 ```
@@ -188,6 +204,11 @@ await PersistlyGameSaves.shared.linkProvider({
 await PersistlyGameSaves.shared.linkProvider({
   provider: "supabase",
   token: supabaseAccessToken,
+});
+
+await PersistlyGameSaves.shared.linkProvider({
+  provider: "auth0",
+  token: auth0Token,
 });
 ```
 
