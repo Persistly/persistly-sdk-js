@@ -139,7 +139,7 @@ paths:
       tags: [Account Auth]
       summary: Exchange provider token for account session
       description: |
-        Verify a configured Firebase Auth ID token or Supabase access token and return a normal Persistly account session.
+        Verify a configured Firebase Auth ID token, Supabase access token, or Auth0 token and return a normal Persistly account session.
         SDK helpers are preferred for most games. Direct HTTP is intended for custom engines,
         custom SDKs, and advanced integrations that intentionally manage accountId and accountSessionToken.
 
@@ -169,6 +169,12 @@ paths:
                   provider: supabase
                   token: SUPABASE_ACCESS_TOKEN_PLACEHOLDER
                   deviceLabel: Steam Deck
+              auth0:
+                summary: Auth0 token exchange
+                value:
+                  provider: auth0
+                  token: AUTH0_TOKEN_PLACEHOLDER
+                  deviceLabel: Browser
       responses:
         '200':
           description: Account session issued
@@ -843,7 +849,7 @@ components:
           $ref: '#/components/schemas/CreateAccountInitialSlot'
     AuthProvider:
       type: string
-      enum: [firebase, supabase]
+      enum: [firebase, supabase, auth0]
     AuthSessionRequest:
       type: object
       required: [provider, token]
@@ -853,7 +859,7 @@ components:
           $ref: '#/components/schemas/AuthProvider'
         token:
           type: string
-          description: Raw provider token, such as a Firebase ID token or Supabase access token. Never log or persist this value.
+          description: Raw provider token, such as a Firebase ID token, Supabase access token, or Auth0 token. Never log or persist this value.
         deviceLabel:
           type: string
           maxLength: 80
