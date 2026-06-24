@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0
+
+- Adds Auth Bridge helpers for games that already sign players in with Firebase Auth, Supabase Auth, or Auth0.
+- Adds `authRequired` account mode so games can keep local saves before sign-in while cloud sync waits for a provider token exchange.
+- Adds provider sign-in, provider linking, linked-provider listing, and provider-specific error classes for safe setup diagnostics.
+- Adds Auth Bridge templates and examples while keeping normal save/load/sync calls on Persistly account sessions, not provider tokens.
+
 ## 1.0.0
 
 - Marks the JavaScript SDK as the first stable Persistly browser-game SDK release.
