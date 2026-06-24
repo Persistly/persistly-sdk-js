@@ -143,6 +143,10 @@ paths:
         SDK helpers are preferred for most games. Direct HTTP is intended for custom engines,
         custom SDKs, and advanced integrations that intentionally manage accountId and accountSessionToken.
 
+        Free workspaces can test Auth Bridge with stage runtime keys. Production Auth Bridge
+        requires a paid workspace plan and returns auth_bridge_requires_paid_plan before provider
+        token verification runs.
+
         To link a verified identity to the current account, send both X-Persistly-Account-ID and
         X-Persistly-Account-Session headers. Do not send accountId or accountSessionToken in the JSON body.
       security:
@@ -225,6 +229,23 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '402':
           $ref: '#/components/responses/PaymentRequired'
+        '403':
+          description: Production Auth Bridge requires a paid workspace plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                authBridgeRequiresPaidPlan:
+                  summary: Free workspace using a production runtime key
+                  value:
+                    error:
+                      code: auth_bridge_requires_paid_plan
+                      message: Production Auth Bridge requires a paid workspace plan.
+                      details:
+                        environment: prod
+                        plan: free
+                        upgradePath: https://dashboard.persistly.app/settings/billing#plans
         '409':
           description: Auth provider is not ready or provider identity is already linked to another account
           content:
@@ -1224,7 +1245,7 @@ components:
           properties:
             code:
               type: string
-              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, slot_archived, account_deleted, account_suspended, slot_deleted, transfer_code_invalid, transfer_code_expired, transfer_code_consumed, transfer_code_rate_limited, transfer_code_disabled, invalid_account_session, provider_not_supported, provider_not_enabled, provider_not_configured, provider_config_invalid, firebase_project_id_required, firebase_project_id_invalid, firebase_token_missing, firebase_token_invalid, firebase_token_expired, firebase_project_mismatch, supabase_project_url_required, supabase_project_url_invalid, supabase_token_missing, supabase_token_invalid, supabase_token_expired, supabase_project_mismatch, supabase_audience_mismatch, account_auth_conflict, rate_limited, monthly_quota_exceeded, payload_too_large, server_error]
+              enum: [invalid_request, unauthorized, forbidden, not_found, conflict, slot_already_exists, slot_archived, account_deleted, account_suspended, slot_deleted, transfer_code_invalid, transfer_code_expired, transfer_code_consumed, transfer_code_rate_limited, transfer_code_disabled, invalid_account_session, provider_not_supported, provider_not_enabled, provider_not_configured, provider_config_invalid, auth_bridge_requires_paid_plan, firebase_project_id_required, firebase_project_id_invalid, firebase_token_missing, firebase_token_invalid, firebase_token_expired, firebase_project_mismatch, supabase_project_url_required, supabase_project_url_invalid, supabase_token_missing, supabase_token_invalid, supabase_token_expired, supabase_project_mismatch, supabase_audience_mismatch, auth0_domain_required, auth0_domain_invalid, auth0_token_missing, auth0_token_invalid, auth0_token_expired, auth0_issuer_mismatch, auth0_audience_mismatch, account_auth_conflict, rate_limited, monthly_quota_exceeded, payload_too_large, server_error]
             message:
               type: string
             details:
