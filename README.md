@@ -14,7 +14,7 @@ JavaScript SDK for Persistly cloud saves in browser games, JavaScript game clien
 
 Most games should start with `PersistlyGameSaves`: configure once, save data locally, load locally, and sync to Persistly at safe moments. Simple games can use `saveData` and `loadData`. Games with manual saves or multiple slots can use `saveSlot` and `loadSlot`.
 
-This package is `1.1.0` and includes the account-first `persistly-contract-v0.4.0` bundle for release validation.
+This package is `1.2.0` and includes the account-first `persistly-contract-v0.4.0` bundle for release validation.
 
 ## Install
 
@@ -124,6 +124,8 @@ Use `clearLocalAccount()` for local sign-out only. Use `deleteAccount()` for per
 
 Use Auth Bridge when your game already signs players in with Firebase Auth, Supabase Auth, or Auth0. Persistly verifies the provider token once, then returns a normal Persistly account session. Save, load, and sync calls do not send provider tokens.
 
+Persistly anonymous-first is separate from provider anonymous auth. In the default flow, Persistly can create an anonymous Persistly account for local-first cloud saves; later, your game gets a Firebase ID token, Supabase access token, or Auth0 token from its own auth SDK and connects that provider to the current Persistly account.
+
 ```ts
 await PersistlyGameSaves.configure({
   runtimeKey: "ps_test_replace_me",
@@ -196,6 +198,18 @@ await PersistlyGameSaves.shared.signInWithProvider({
 To attach an additional provider to the current Persistly account:
 
 ```ts
+await PersistlyGameSaves.shared.connectWithFirebaseToken(firebaseIdToken);
+
+await PersistlyGameSaves.shared.connectWithSupabaseToken(supabaseAccessToken);
+
+await PersistlyGameSaves.shared.connectWithAuth0Token(auth0Token);
+```
+
+If the provider is already linked to another Persistly account, connect-later returns `account_auth_conflict` and preserves the current local anonymous progress. Do not automatically clear local data or switch accounts; show both choices in your game UI and continue saving locally until the player confirms.
+
+The older `linkProvider()` name remains available for wrappers that already use it:
+
+```ts
 await PersistlyGameSaves.shared.linkProvider({
   provider: "firebase",
   token: firebaseIdToken,
@@ -241,6 +255,7 @@ await PersistlyGameSaves.shared.forceSyncAccount();
 - `templates/multi-slot` for manual saves, campaigns, and slot select screens.
 - `templates/account-slots` for games with sign-in or cross-device restore.
 - `templates/auth-required` for games that require provider sign-in before cloud sync.
+- `templates/anonymous-first-connect-later` for games that start anonymous, save first, and connect Firebase, Supabase, or Auth0 later.
 
 ## Advanced Runtime Client
 

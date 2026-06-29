@@ -70,6 +70,9 @@ test("public auth bridge surface includes supported broker helpers", async () =>
   assert.match(publicText, /signInWithFirebaseToken/);
   assert.match(publicText, /signInWithSupabaseToken/);
   assert.match(publicText, /signInWithAuth0Token/);
+  assert.match(publicText, /connectWithFirebaseToken/);
+  assert.match(publicText, /connectWithSupabaseToken/);
+  assert.match(publicText, /connectWithAuth0Token/);
   assert.match(publicText, /provider: "firebase" \| "supabase" \| "auth0"/);
   assert.doesNotMatch(publicText, /signInWithGoogleIdToken/);
   assert.doesNotMatch(publicText, /auth-google/);

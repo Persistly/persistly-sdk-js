@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0
+
+- Adds explicit connect-later helpers for anonymous-first games: `connectWithFirebaseToken`, `connectWithSupabaseToken`, `connectWithAuth0Token`, and `connectProvider`.
+- Adds an anonymous-first Auth Bridge template showing how to keep local/cloud progress before sign-in and connect Firebase later without silently overwriting saves.
+- Clarifies Auth Bridge docs so provider tokens are used only for sign-in/connect exchanges while normal save/load/sync calls continue on Persistly account sessions.
+
 ## 1.1.0
 
 - Adds Auth Bridge helpers for games that already sign players in with Firebase Auth, Supabase Auth, or Auth0.

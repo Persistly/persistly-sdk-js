@@ -491,6 +491,34 @@ test("linkProvider uses current account session headers for Supabase", async () 
   assert.equal(headers.get("x-persistly-account-session"), "pst_local");
 });
 
+test("connectProvider aliases linkProvider for anonymous-to-auth upgrades", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const persistly = new PersistlyGameSavesInstance({
+    runtimeKey: "ps_test_runtime",
+    storage: "memory",
+    accountId: "acc_local",
+    accountSessionToken: "pst_local",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      return jsonResponse(200, {
+        accountId: "acc_local",
+        accountSessionToken: "pst_rotated",
+        isNewAccount: false,
+        linkedProvider: "firebase",
+        wasProviderNewForAccount: true,
+      });
+    },
+  });
+
+  const result = await persistly.connectWithFirebaseToken("firebase-id-token", { deviceLabel: "Laptop" });
+
+  assert.equal(result.accountId, "acc_local");
+  assert.equal(result.linkedProvider, "firebase");
+  const headers = new Headers(requests[0]?.init?.headers);
+  assert.equal(headers.get("x-persistly-account-id"), "acc_local");
+  assert.equal(headers.get("x-persistly-account-session"), "pst_local");
+});
+
 test("linkProvider conflict preserves current account session", async () => {
   const persistly = new PersistlyGameSavesInstance({
     runtimeKey: "ps_test_runtime",
