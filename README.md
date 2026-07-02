@@ -14,7 +14,7 @@ JavaScript SDK for Persistly cloud saves in browser games, JavaScript game clien
 
 Most games should start with `PersistlyGameSaves`: configure once, save data locally, load locally, and sync to Persistly at safe moments. Simple games can use `saveData` and `loadData`. Games with manual saves or multiple slots can use `saveSlot` and `loadSlot`.
 
-This package is `1.2.0` and includes the account-first `persistly-contract-v0.4.0` bundle for release validation.
+This package is `1.3.0` and includes the account-first `persistly-contract-v0.4.0` bundle for release validation.
 
 ## Install
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0
+
+- Exposes `isPersistlyAccountAuthConflict` so games can identify Auth Bridge account conflicts without string-matching error codes.
+- Clarifies anonymous-first Auth Bridge conflict handling: local progress stays active when a provider identity already belongs to another Persistly account.
+- Updates anonymous-first examples and docs to avoid implying automatic merge, copy, import, overwrite, or replacement of provider-linked account data.
+
 ## 1.2.0
 
 - Adds explicit connect-later helpers for anonymous-first games: `connectWithFirebaseToken`, `connectWithSupabaseToken`, `connectWithAuth0Token`, and `connectProvider`.
