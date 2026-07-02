@@ -8,6 +8,7 @@ import {
   PersistlyClient,
   PersistlyGameSaveStatus,
   PersistlyGameSavesInstance,
+  isPersistlyAccountAuthConflict,
 } from "../src/index.js";
 
 const syncPolicy = {
@@ -519,7 +520,7 @@ test("connectProvider aliases linkProvider for anonymous-to-auth upgrades", asyn
   assert.equal(headers.get("x-persistly-account-session"), "pst_local");
 });
 
-test("linkProvider conflict preserves current account session", async () => {
+test("linkProvider conflict preserves current account session and local save data", async () => {
   const persistly = new PersistlyGameSavesInstance({
     runtimeKey: "ps_test_runtime",
     storage: "memory",
@@ -540,15 +541,82 @@ test("linkProvider conflict preserves current account session", async () => {
     }),
   });
 
+  await persistly.saveData({ level: 7, coins: 120 });
+
   await assert.rejects(
     () => persistly.linkProvider({ provider: "firebase", token: "firebase-id-token" }),
-    (error) => error instanceof PersistlyAccountAuthConflictError,
+    (error) => error instanceof PersistlyAccountAuthConflictError
+      && isPersistlyAccountAuthConflict(error),
   );
 
+  const loaded = await persistly.loadData();
   assert.deepEqual(await persistly.getAccountSession({ includeToken: true }), {
     accountId: "acc_local",
     accountSessionToken: "pst_local",
   });
+  assert.equal(loaded.status, PersistlyGameSaveStatus.LocalFound);
+  assert.deepEqual(loaded.data, { level: 7, coins: 120 });
+});
+
+test("discard-local auth conflict path clears local cache before provider sign-in", async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const persistly = new PersistlyGameSavesInstance({
+    runtimeKey: "ps_test_runtime",
+    storage: "memory",
+    accountId: "acc_local",
+    accountSessionToken: "pst_local",
+    fetch: async (input, init) => {
+      requests.push({ url: String(input), init });
+      if (requests.length === 1) {
+        return jsonResponse(409, {
+          error: {
+            code: "account_auth_conflict",
+            message: "Auth identity is already linked to another account.",
+            details: {
+              summary: {
+                linkedProvider: "firebase",
+                linkedProviderCount: 1,
+                linkedAccount: { activeSlotCount: 2 },
+              },
+            },
+          },
+        });
+      }
+      return jsonResponse(200, {
+        accountId: "acc_provider",
+        accountSessionToken: "pst_provider",
+        isNewAccount: false,
+        linkedProvider: "firebase",
+        wasProviderNewForAccount: false,
+      });
+    },
+  });
+
+  await persistly.saveData({ level: 8, coins: 250 });
+  await assert.rejects(
+    () => persistly.connectWithFirebaseToken("firebase-id-token"),
+    isPersistlyAccountAuthConflict,
+  );
+
+  await persistly.clearLocalAccount();
+  const loadedAfterClear = await persistly.loadData();
+  await persistly.signInWithFirebaseToken("fresh-firebase-id-token", { deviceLabel: "Laptop" });
+
+  assert.equal(loadedAfterClear.status, PersistlyGameSaveStatus.NotFound);
+  assert.deepEqual(await persistly.getAccountSession({ includeToken: true }), {
+    accountId: "acc_provider",
+    accountSessionToken: "pst_provider",
+  });
+
+  const firstHeaders = new Headers(requests[0]?.init?.headers);
+  assert.equal(firstHeaders.get("x-persistly-account-id"), "acc_local");
+  assert.equal(firstHeaders.get("x-persistly-account-session"), "pst_local");
+  assert.equal(JSON.stringify(requests[0]?.init ?? {}).includes("firebase-id-token"), true);
+
+  const secondHeaders = new Headers(requests[1]?.init?.headers);
+  assert.equal(secondHeaders.get("x-persistly-account-id"), null);
+  assert.equal(secondHeaders.get("x-persistly-account-session"), null);
+  assert.equal(JSON.stringify(requests[1]?.init ?? {}).includes("fresh-firebase-id-token"), true);
 });
 
 test("listLinkedProviders parses safe provider list", async () => {
@@ -667,8 +735,16 @@ test("account_auth_conflict becomes a typed SDK error", async () => {
     () => client.exchangeAccountAuthSession({ provider: "firebase", token: "firebase-id-token" }),
     (error) => error instanceof PersistlyAccountAuthConflictError
       && error.code === "account_auth_conflict"
+      && isPersistlyAccountAuthConflict(error)
       && error.status === 409,
   );
+});
+
+test("account auth conflict guard recognizes safe error-shaped objects", () => {
+  assert.equal(isPersistlyAccountAuthConflict(new PersistlyAccountAuthConflictError("Already linked")), true);
+  assert.equal(isPersistlyAccountAuthConflict({ code: "account_auth_conflict" }), true);
+  assert.equal(isPersistlyAccountAuthConflict({ code: "conflict" }), false);
+  assert.equal(isPersistlyAccountAuthConflict(null), false);
 });
 
 test("client rejects unsupported auth providers before network", async () => {

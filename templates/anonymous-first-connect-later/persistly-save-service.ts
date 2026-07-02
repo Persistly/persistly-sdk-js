@@ -1,4 +1,4 @@
-import { PersistlyAccountAuthConflictError, PersistlyGameSaves } from "@persistlyapp/sdk";
+import { PersistlyGameSaves, isPersistlyAccountAuthConflict } from "@persistlyapp/sdk";
 
 export type GameSave = {
   level: number;
@@ -36,15 +36,16 @@ export async function connectFirebase(firebaseIdToken: string): Promise<"connect
     });
     return "connected";
   } catch (error) {
-    if (error instanceof PersistlyAccountAuthConflictError) {
+    if (isPersistlyAccountAuthConflict(error)) {
       return "conflict";
     }
     throw error;
   }
 }
 
-export async function switchToProviderAccount(firebaseIdToken: string): Promise<void> {
-  // Only call this after the player confirms replacing this device's local progress.
+export async function discardLocalAndUseProviderAccount(firebaseIdToken: string): Promise<void> {
+  // Only call this after the player confirms discarding this device's local Persistly state.
+  // This does not copy anonymous progress into the provider-linked cloud account.
   await PersistlyGameSaves.shared.clearLocalAccount();
   await PersistlyGameSaves.shared.signInWithFirebaseToken(firebaseIdToken, {
     deviceLabel: navigator.userAgent,

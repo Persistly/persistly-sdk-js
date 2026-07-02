@@ -4,6 +4,7 @@ import {
   saveGame,
   signInWithFirebase,
   signInWithSupabase,
+  signInWithAuth0,
   signOut,
   syncGame,
   type PlayerSaveData,
@@ -19,6 +20,11 @@ if (usesFirebaseAuth()) {
 // Or replace with the access token returned by Supabase Auth in Supabase-backed games.
 if (usesSupabaseAuth()) {
   await signInWithSupabase("SUPABASE_ACCESS_TOKEN_PLACEHOLDER", "Browser");
+}
+
+// Or replace with the token returned by Auth0 in Auth0-backed games.
+if (usesAuth0()) {
+  await signInWithAuth0("AUTH0_TOKEN_PLACEHOLDER", "Browser");
 }
 
 const existing = await loadGame();
@@ -46,6 +52,10 @@ function usesFirebaseAuth(): boolean {
 }
 
 function usesSupabaseAuth(): boolean {
+  return false;
+}
+
+function usesAuth0(): boolean {
   return false;
 }
 

@@ -205,7 +205,35 @@ await PersistlyGameSaves.shared.connectWithSupabaseToken(supabaseAccessToken);
 await PersistlyGameSaves.shared.connectWithAuth0Token(auth0Token);
 ```
 
-If the provider is already linked to another Persistly account, connect-later returns `account_auth_conflict` and preserves the current local anonymous progress. Do not automatically clear local data or switch accounts; show both choices in your game UI and continue saving locally until the player confirms.
+If the provider is already linked to another Persistly account, connect-later returns `account_auth_conflict` and preserves the current local anonymous progress. Do not merge, copy, import, overwrite, or replace the active account automatically.
+
+```ts
+import { isPersistlyAccountAuthConflict } from "@persistlyapp/sdk";
+
+try {
+  await PersistlyGameSaves.shared.connectWithFirebaseToken(firebaseIdToken);
+} catch (error) {
+  if (!isPersistlyAccountAuthConflict(error)) {
+    throw error;
+  }
+
+  // Local progress is still active. Safe choices are:
+  // 1. keep local progress and continue playing
+  // 2. sign out of the provider, choose a different provider account, then retry connect
+  // 3. after explicit player confirmation, clear local Persistly state and sign into the existing provider-linked cloud account
+}
+```
+
+The discard-local path is intentionally explicit:
+
+```ts
+await confirmDiscardLocalProgressInYourGameUI();
+await PersistlyGameSaves.shared.clearLocalAccount();
+const freshToken = await getFreshProviderToken();
+await PersistlyGameSaves.shared.signInWithFirebaseToken(freshToken);
+```
+
+This clears only Persistly local state on the current device. It does not copy anonymous progress into the provider-linked cloud account, and it does not overwrite the provider-linked account.
 
 The older `linkProvider()` name remains available for wrappers that already use it:
 

@@ -70,6 +70,7 @@ test("public auth bridge surface includes supported broker helpers", async () =>
   assert.match(publicText, /signInWithFirebaseToken/);
   assert.match(publicText, /signInWithSupabaseToken/);
   assert.match(publicText, /signInWithAuth0Token/);
+  assert.match(publicText, /isPersistlyAccountAuthConflict/);
   assert.match(publicText, /connectWithFirebaseToken/);
   assert.match(publicText, /connectWithSupabaseToken/);
   assert.match(publicText, /connectWithAuth0Token/);
@@ -80,4 +81,7 @@ test("public auth bridge surface includes supported broker helpers", async () =>
   assert.doesNotMatch(publicText, /\boidc_jwt\b/i);
   assert.doesNotMatch(publicText, /\bOIDC\b/);
   assert.doesNotMatch(publicText, /\bGoogle\b/);
+  assert.doesNotMatch(publicText, /\bmerge(Account|Provider|Cloud)\b/);
+  assert.doesNotMatch(publicText, /\bimport(Account|Provider|Cloud)\b/);
+  assert.doesNotMatch(publicText, /\boverwrite(Account|Provider|Cloud)\b/);
 });

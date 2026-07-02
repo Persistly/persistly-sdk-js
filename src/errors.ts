@@ -250,6 +250,16 @@ export class PersistlyAccountAuthConflictError extends PersistlyApiError {
   }
 }
 
+export function isPersistlyAccountAuthConflict(error: unknown): error is PersistlyAccountAuthConflictError {
+  if (error instanceof PersistlyAccountAuthConflictError) {
+    return true;
+  }
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && (error as { code?: unknown }).code === "account_auth_conflict";
+}
+
 export class PersistlyRateLimitedError extends PersistlyApiError {
   constructor(message: string, details?: Record<string, unknown>, status = 429) {
     super(status, "rate_limited", message, details);

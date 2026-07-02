@@ -11,7 +11,15 @@ The flow is:
 3. Sync at safe moments; Persistly creates an anonymous cloud account if needed.
 4. When the player chooses account connection, get a provider token from your game's existing Firebase, Supabase, or Auth0 SDK.
 5. Call `connectWithFirebaseToken`, `connectWithSupabaseToken`, or `connectWithAuth0Token`.
-6. If the provider is already linked to another Persistly account, Persistly returns `account_auth_conflict`. The SDK keeps the current local progress; ask the player before clearing local data and switching accounts.
+6. If the provider is already linked to another Persistly account, Persistly returns `account_auth_conflict`. The SDK keeps the current local progress.
+
+On `account_auth_conflict`, do not merge or overwrite accounts automatically. Show a player choice:
+
+- keep local progress and continue playing
+- sign out of the provider, choose a different provider account, then retry connect
+- discard local Persistly state on this device and sign into the existing provider-linked cloud account
+
+The discard-local choice clears only the SDK cache/session on the current device. It does not copy anonymous progress into the provider-linked cloud account.
 
 Persistly does not provide login UI in this phase. Your game owns the Firebase, Supabase, or Auth0 sign-in flow.
 

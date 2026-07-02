@@ -25,8 +25,14 @@ export async function signInWithSupabase(token: string, deviceLabel?: string): P
   });
 }
 
+export async function signInWithAuth0(token: string, deviceLabel?: string): Promise<void> {
+  await PersistlyGameSaves.shared.signInWithAuth0Token(token, {
+    ...(deviceLabel === undefined ? {} : { deviceLabel }),
+  });
+}
+
 export async function signInWithProvider(
-  provider: "firebase" | "supabase",
+  provider: "firebase" | "supabase" | "auth0",
   token: string,
   deviceLabel?: string,
 ): Promise<void> {
